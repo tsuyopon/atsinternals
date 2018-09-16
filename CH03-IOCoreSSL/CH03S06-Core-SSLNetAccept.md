@@ -1,19 +1,20 @@
-# 核心组件 SSLNetAccept
+# Core component SSLNetAccept
 
-SSLNetAccept继承自NetAccept，它对NetAccept的部分方法进行了重载，实现了SSLNetAccept的功能。
 
-前面讲到NetVC的创建有两种方式：
+SSLNetAccept inherits from NetAccept, which overloads some of NetAccept's methods and implements the functionality of SSLNetAccept.
 
-  - 一种通过NetAccept
-  - 一种通过connectUp
+Earlier, there are two ways to create NetVC:
 
-因此对于每一种NetVC及其继承子类，都有对应的NetAccept和connectUp的实现。
+  - One through NetAccept
+  - One way through connectUp
 
-而SSLNetAccept则是对应NetAccept，用于创建SSLNetVConnection
+So for each NetVC and its subclasses, there are corresponding implementations of NetAccept and connectUp.
 
-下面的讲解将着重介绍被重载的方法，因此请对照NetAccept的章节一起理解SSLNetAccept的实现
+SSLNetAccept is for NetAccept and is used to create SSLNetVConnection.
 
-## 定义
+The following explanation will focus on the methods that are overloaded, so please understand the implementation of SSLNetAccept in conjunction with the NetAccept chapter.
+
+## definition
 
 ```
 //
@@ -34,11 +35,11 @@ struct SSLNetAccept : public NetAccept {
 typedef int (SSLNetAccept::*SSLNetAcceptHandler)(int, void *);
 ```
 
-## 方法
+## Method
 
 ### SSLNetAccept::getNetProcessor()
 
-此方法用于返回NetProcessor的全局类型实例。
+This method is used to return a global type instance of NetProcessor.
 
 ```
 NetProcessor *
@@ -50,18 +51,18 @@ SSLNetAccept::getNetProcessor() const
 
 ### SSLNetAccept::getEtype()
 
-在NetAccept中，此方法用于返回 etype 成员，etype成员用于表示此NetAccept创建的NetVC后，会把此NetVC交由哪一个线程组负责。
+In NetAccept, this method is used to return the etype member. After the etype member is used to indicate the NetVC created by this NetAccept, it will be responsible for which thread group this NetVC is assigned to.
 
-在ATS的设计中，存在一个独立的线程组 ET_SSL，专门处理 SSLNetVConnection 类型的连接。
+In the design of the ATS, there is a separate thread group ET_SSL that handles connections of the SSLNetVConnection type.
 
-但是当 ET_SSL 专用的线程组在配置文件中被设置为 0 时：
+But when the ET_SSL dedicated thread group is set to 0 in the configuration file:
 
-  - 那么 ET_SSL 就被设置为与 ET_NET 相同的值
-  - 因此 UnixNetVConnection 和 SSLNetVConnection 将由同一个线程组处理
+  - Then ET_SSL is set to the same value as ET_NET
+  - So UnixNetVConnection and SSLNetVConnection will be handled by the same thread group
 
-此方法固定返回 ET_SSL。
+This method fixedly returns ET_SSL.
 
-为何不是返回 etype 成员呢？？？
+Why not return an etype member? ? ?
 
 ```
 // Virtual function allows the correct
@@ -76,11 +77,11 @@ SSLNetAccept::getEtype() const
 
 ### SSLNetAccept::init_accept_per_thread(bool isTransparent)
 
-为 ET_SSL 线程组创建并初始化SSLNetAccept状态机。
+Create and initialize the SSLNetAccept state machine for the ET_SSL thread group.
 
-前面讲过 NetAccept 有两种运行模式，独立线程模式和状态机模式，这个就是采用状态机模式，要在线程组中创建对应的状态机。
+As mentioned earlier, NetAccept has two modes of operation, the independent thread mode and the state machine mode. This is the state machine mode, and the corresponding state machine is created in the thread group.
 
-period 是负数，因此会进入隐性队列（负队列）。
+Period is a negative number and therefore enters an implicit queue (negative queue).
 
 ```
 void
@@ -115,10 +116,10 @@ SSLNetAccept::init_accept_per_thread(bool isTransparent)
 
 ### SSLNetAccept::clone()
 
-这个方法用于上面的SSLNetAccept::init_accept_per_thread()，与NetAccept::clone()的不同之处就是：
+This method is used in the above SSLNetAccept::init_accept_per_thread(), which differs from NetAccept::clone() in that:
 
   - new SSLNetAccept
-  - 创建的是SSLNetAccept对象。
+  - Created is the SSLNetAccept object.
 
 ```
 NetAccept *
@@ -131,7 +132,7 @@ SSLNetAccept::clone() const
 }
 ```
 
-## 参考资料
+## Reference material
 
 - [P_SSLNetAccept.h](https://github.com/apache/trafficserver/tree/master/iocore/net/P_SSLNetAccept.h)
 - [SSLNetAccept.cc](https://github.com/apache/trafficserver/tree/master/iocore/net/SSLNetAccept.cc)

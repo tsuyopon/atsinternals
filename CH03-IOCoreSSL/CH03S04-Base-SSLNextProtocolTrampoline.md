@@ -1,31 +1,30 @@
-# 基础组件：SSLNextProtocolTrampoline
-
-Trampoline 在英语里是“蹦床”的意思，非常形象的勾勒出这个组件的功能。
-
-在前面我们介绍NetAccept时，提到Acceptor和NetVC与SM的关系，需要Acceptor接受新的NetVC，然后创建SM对象，并与NetVC关联。
+# Basic component: SSLNextProtocolTrampoline
 
 
+Trampoline is a "trampoline" in English, which is a very graphic representation of the function of this component.
 
-在SSL的实现里要增加一个步骤，在Acceptor之后有一个“蹦床”，由蹦床根据NPN/ALPN的协商再跳到对应的SessionAcceptor。
+When we introduced NetAccept in the previous section, we mentioned the relationship between Acceptor and NetVC and SM. We need the Acceptor to accept the new NetVC, then create the SM object and associate it with NetVC.
 
-而多个不同的 SessionAcceptor 被注册到蹦床里，通过 SSLNextProtocolSet 来管理。
+In the implementation of SSL, a step is added. After the Acceptor, there is a "trampoline", and the trampoline jumps to the corresponding SessionAcceptor according to the negotiation of NPN/ALPN.
 
-这里的 SessionAcceptor 实际上已经是上层状态机的一部分了，SessionAcceptor会负责创建对应的状态机。
+A number of different SessionAcceptors are registered in the trampoline and managed via SSLNextProtocolSet.
 
-在 ProtocolTrampoline 的设计中，需要考虑对 NPN/ALPN 协议支持、不支持的两种类型的客户端：
+The SessionAcceptor here is actually part of the upper state machine, and the SessionAcceptor is responsible for creating the corresponding state machine.
 
-  - 对于支持 NPN/ALPN 协议的客户端所建立的 SSLNetVC
-    - 通过解析 NPN/ALPN 协议来确认应用层协议的类型，直接跳转到对应的状态机
-  - 对于不支持 NPN/ALPN 协议的客户端所建立的 SSLNetVC
-    - 直接跳转到 ProbeSessionAccept，
-    - 然后通过 ProbeSessionTrampoline 来判定应用层的协议类型，再跳转到对应的状态机
+In the design of ProtocolTrampoline, you need to consider two types of clients that are supported and not supported by the NPN/ALPN protocol:
 
-这个设计就像是有不同本领的忍者，当不能直接到达目标时，通过“忍者跳跃”借助辅助工具“蹦床”达到最终的目标：
+  - SSLNetVC established for clients that support the NPN/ALPN protocol
+    - Confirm the type of the application layer protocol by parsing the NPN/ALPN protocol, and jump directly to the corresponding state machine.
+  - SSLNetVC established for clients that do not support the NPN/ALPN protocol
+    - Jump directly to ProbeSessionAccept,
+    - Then determine the protocol type of the application layer through ProbeSessionTrampoline, and then jump to the corresponding state machine.
 
-  - 有的能一次跳跃达到终点
-  - 有的需要借助两次跳跃才能达到终点
+This design is like a ninja with different skills. When you can't reach the target directly, you can achieve the ultimate goal with the aid of the “boring machine” through the “Ninja Jump”:
 
-双蹦床的设计，如下图所示：
+  - Some can jump to the end point
+  - Some need to use two jumps to reach the end
+
+The design of the double trampoline is shown below:
 
 ```
                                                     ?       ?                        #     #     #     #
@@ -59,7 +58,7 @@ Trampoline 在英语里是“蹦床”的意思，非常形象的勾勒出这个
 
 ```
 
-## 定义
+## definition
 
 ```
 // SSLNextProtocolTrampoline is the receiver of the I/O event generated when we perform a 0-length read on the new SSL
@@ -67,23 +66,24 @@ Trampoline 在英语里是“蹦床”的意思，非常形象的勾勒出这个
 // NPN extension. The Continuation that receives the read event *must* have a mutex, but we don't want to take a global
 // lock across the handshake, so we make a trampoline to bounce the event from the SSL acceptor to the ultimate session
 // acceptor.
-// 对源代码的注释做直接翻译，如下：
-// 当在一个SSL连接上，执行长度为0字节的读操作时，EventSystem 将回调 SSLNextProtocolTrampoline 来接受这个I/O事件。
-//     注：这里0长度的读取操作里的0长度，指的是解密后的数据长度。例如：对于握手过程，就是0长度。
-// 0字节读操作的关注点就是SSL握手过程，实现了绑定一个NPN扩展选中的协议末端。
-// 被这个读事件回调的“延续”必须要有一个mutex锁，但是我们又不希望在整个握手过程中一直保持上锁状态，
-// 因此设计了这个蹦床，将这个事件从SSL Acceptor弹到最终的Session Acceptor。
+
+// Direct translation of the source code comments as follows:
+// When a read operation of length 0 bytes is executed on an SSL connection, EventSystem will call back SSLNextProtocolTrampoline to accept this I/O event.
+// Note: The length of 0 in the 0-length read operation refers to the length of the decrypted data. For example: for the handshake process, it is 0 length.
+// The focus of the 0-byte read operation is the SSL handshake process, which implements the end of the protocol selected by binding an NPN extension.
+// The "continuation" of this read event callback must have a mutex lock, but we don't want to remain locked throughout the handshake process.
+// So the trampoline was designed to bounce this event from the SSL Acceptor to the final Session Acceptor.
 
 struct SSLNextProtocolTrampoline : public Continuation {
-  // 构造函数
-  // 初始化mutex和npnParent成员，并设置回调函数为ioCompletionEvent
+  // Constructor
+  // Initialize mutex and npnParent members, and set the callback function to ioCompletionEvent
   explicit SSLNextProtocolTrampoline(const SSLNextProtocolAccept *npn, ProxyMutex *mutex) : Continuation(mutex), npnParent(npn)
   {
     SET_HANDLER(&SSLNextProtocolTrampoline::ioCompletionEvent);
   }
 
-  // 这个状态机是被SSLNextProtocolAccept通过new方法创建的，然后通过“蹦床”方式弹到后面的SessionAccept中，
-  // 因此，在弹走SSLNetVC之后要通过delete方法释放对象自身。
+  // This state machine is created by the SSLNextProtocolAccept via the new method, and then popped into the subsequent SessionAccept by the "trampoline" method.
+  // Therefore, after the SSLNetVC is bounced off, the object itself is released via the delete method.
   int
   ioCompletionEvent(int event, void *edata)
   {
@@ -91,61 +91,61 @@ struct SSLNextProtocolTrampoline : public Continuation {
     Continuation *plugin;
     SSLNetVConnection *netvc;
 
-    // 由于是对 0长度 读操作的I/O事件回调，因此 edata 指向的必然是 SSLNetVC 的read.vio成员，是一个VIO类型
+    // Since it is an I/O event callback for a 0-length read operation, edata points to the read.vio member of SSLNetVC, which is a VIO type.
     vio = static_cast<VIO *>(edata);
-    // 解析出 VIO 内包含的 SSLNetVC
+    // Parse out the SSLNetVC contained in VIO
     netvc = dynamic_cast<SSLNetVConnection *>(vio->vc_server);
-    // 如果不是 SSLNetVConnection 类型，那么就 assert 了
+    // If it is not an SSLNetVConnection type, then it is asserted.
     ink_assert(netvc != NULL);
 
-    // 由于是 0长度的读操作，因此只有传入READ_COMPLETE才表示成功，而且不会出现READ_READY，因为READ_COMPLETE优先级较高
-    // 其它情况一律是错误的情况
+    // Since it is a 0-length read operation, only READ_COMPLETE is passed to indicate success, and READ_READY does not occur because READ_COMPLETE has a higher priority.
+    // Other situations are always wrong
     switch (event) {
     case VC_EVENT_EOS:
     case VC_EVENT_ERROR:
     case VC_EVENT_ACTIVE_TIMEOUT:
     case VC_EVENT_INACTIVITY_TIMEOUT:
       // Cancel the read before we have a chance to delete the continuation
-      // 遇到连接超时的时候，注销读操作，关闭SSLNetVC，回收“蹦床”自身
+      // When the connection timeout occurs, log out the read operation, close SSLNetVC, and recycle the "trampoline" itself.
       netvc->do_io_read(NULL, 0, NULL);
       netvc->do_io(VIO::CLOSE);
       delete this;
       return EVENT_ERROR;
     case VC_EVENT_READ_COMPLETE:
-      // 遇到我们需要的READ_COMPLETE事件，直接跳出switch
+      // Encounter the READ_COMPLETE event we need, jump out of the switch
       break;
     default:
-      // 感觉不应该有任何运行到这里的可能
-      // 是不是要弄个assert在这里？不然要内存泄漏了？
+      // I don’t think there should be any possibility of running here.
+      // Is it necessary to get an assert here? Otherwise, the memory leaks.
       return EVENT_ERROR;
     }
 
     // Cancel the read before we have a chance to delete the continuation
-    // 注销读操作，因为接下来要回收“蹦床”自身
+    // Log out the read operation because the next step is to recycle the trampoline itself.
     netvc->do_io_read(NULL, 0, NULL);
-    // 通过SSLNetVConnection的endpoint方法获取 npnEndpoint 成员
+    // Get the npnEndpoint member through the SSLNetVConnection endpoint method
     plugin = netvc->endpoint();
     if (plugin) {
-      // 优先“弹到” npnEndpoint 状态机
-      // plugin 是根据 NPN/ALPN 协议确定的状态机，如果为 NULL，则说明：
-      //     客户端不支持 NPN/ALPN 协议，或者该协议没有注册到协商过程中
+      // priority "bounce" npnEndpoint state machine
+      // plugin is the state machine determined according to the NPN/ALPN protocol. If it is NULL, it means:
+      // The client does not support the NPN/ALPN protocol, or the protocol is not registered in the negotiation process.
       send_plugin_event(plugin, NET_EVENT_ACCEPT, netvc);
     } else if (npnParent->endpoint) {
-      // 如果 npnEndpoint 状态机不存在，就“弹到” npnParent->endpoint 状态机
-      // npnParent 是初始化“蹦床”时，传入的 SSLNextProtocolAccept 实例。
-      // npnParent->endpoint 对于 SSLNextProtocolAccept 来说，
-      //     在 HttpProxyServerMain.cc 中被指向了 ProtocolProbeSessionAccept 对象。
-      //     在 ProtocolProbeSessionAccept 中将根据读取到的应用层的数据来确认协议类型。
+      // If the npnEndpoint state machine does not exist, it "bounces" to the npnParent->endpoint state machine
+      // npnParent is the incoming SSLNextProtocolAccept instance when the "boring machine" is initialized.
+      // npnParent->endpoint For SSLNextProtocolAccept,
+      // is pointed to the ProtocolProbeSessionAccept object in HttpProxyServerMain.cc.
+      // In ProtocolProbeSessionAccept, the protocol type will be confirmed based on the data of the read application layer.
       // Route to the default endpoint
       send_plugin_event(npnParent->endpoint, NET_EVENT_ACCEPT, netvc);
     } else {
-      // 如果都不存在，就直接关闭 SSLNetVC
+      // If it does not exist, close SSLNetVC directly.
       // No handler, what should we do? Best to just kill the VC while we can.
       netvc->do_io(VIO::CLOSE);
     }
 
-    // 上面从 NET_EVENT_ACCEPT 事件处理函数返回后，SSLNetVC 的 Read VIO 和/或 Write VIO 会被重新设置，并与上层状态机关联。
-    // 因此可以安全的删除“蹦床”自身，并返回
+    // After returning from the NET_EVENT_ACCEPT event handler, SSLNetVC's Read VIO and/or Write VIO will be reset and associated with the upper state machine.
+    // So you can safely delete the "trampoline" itself and return
     delete this;
     return EVENT_CONT;
   }
@@ -153,27 +153,27 @@ struct SSLNextProtocolTrampoline : public Continuation {
   const SSLNextProtocolAccept *npnParent;
 };
 
-// 用来回调状态机的方法
-// plugin 是即将回调的状态机
-// event 是回调的事件
-// edata 是NetVC
+// Use the method of adjusting the state machine back and forth
+// plugin is the state machine that will be called back
+// event is a callback event
+// edata is NetVC
 static void
 send_plugin_event(Continuation *plugin, int event, void *edata)
 {
   if (plugin->mutex) {
-    // 有mutex，则上锁后回调
+    // With mutex, then callback after locking
     EThread *thread(this_ethread());
     MUTEX_TAKE_LOCK(plugin->mutex, thread);
     plugin->handleEvent(event, edata);
     MUTEX_UNTAKE_LOCK(plugin->mutex, thread);
   } else {
-    // 没有mutex，直接回调
+    // No mutex, direct callback
     plugin->handleEvent(event, edata);
   }
 }
 ```
 
-## 参考资料
+## Reference material
 
 - [SSLNextProtocolAccept.cc](http://github.com/apache/trafficserver/tree/master/iocore/net/SSLNextProtocolAccept.cc)
 - [HttpProxyServerMain.cc](http://github.com/apache/trafficserver/tree/master/proxy/http/HttpProxyServerMain.cc)

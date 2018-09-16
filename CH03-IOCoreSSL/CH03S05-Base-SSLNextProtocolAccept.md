@@ -1,68 +1,68 @@
-# 基础组件：SSLNextProtocolAccept
+# Basic component: SSLNextProtocolAccept
 
-在 IOCoreNET 部分的介绍的 ProtocolProbeSessionAccept 其实是参照了 SSLNextProtocolAccept 的实现。
+The ProtocolProbeSessionAccept introduced in the IOCoreNET section actually refers to the implementation of SSLNextProtocolAccept.
 
-SSLNextProtocolAccept 是读取 NPN / ALPN 协议中传递的类型，然后通过“蹦床”跳转到对应的状态机，ProtocolProbeSessionAccept 则是读取客户端发送的第一个请求报文来判断报文的内容是什么类型，然后通过“蹦床”跳转到对应的状态机。
+SSLNextProtocolAccept reads the type passed in the NPN / ALPN protocol, and then jumps to the corresponding state machine through the "trampoline". ProtocolProbeSessionAccept reads the first request message sent by the client to determine what type of message is. Then, jump to the corresponding state machine through the "trampoline".
 
-通过 register 方法为每一种协议注册一个上层状态机，然后使用“蹦床”来判断 NPN / ALPN 协议中传递的类型，在完成SSL握手后，通过“蹦床”跳转到对应的状态机。
+Register an upper state machine for each protocol through the register method, then use the "trampoline" to determine the type passed in the NPN / ALPN protocol. After completing the SSL handshake, jump to the corresponding state machine through the "trampoline".
 
-可以看到与 ProtocolProbeSessionAccept 和 ProtocolProbeSessionTrampoline 组合的功能非常的接近。
+You can see that the functionality combined with ProtocolProbeSessionAccept and ProtocolProbeSessionTrampoline is very close.
 
-## 定义
+## definition
 
 ```
 class SSLNextProtocolAccept : public SessionAccept
 {
 public:
-  // 构造函数：
-  //     初始化mutex为NULL，使用 new_empty_MIOBuffer() 创建 buffer，
-  //     用传入的状态机初始化endpoint，用传入的transparent_passthrough初始化成员
-  // 设置回调函数为 mainEvent
-  SSLNextProtocolAccept(Continuation *, bool);
-  // 析构函数：用来释放成员 buffer
+  // Constructor:
+  // Initialize mutex to NULL, create buffer using new_empty_MIOBuffer(),
+  // Initialize the endpoint with the incoming state machine and initialize the member with the incoming transparent_passthrough
+  // Set the callback function to mainEvent
+  SSLNextProtocolAccept(Continuation *, bool);
+  // Destructor: used to release member buffer
   ~SSLNextProtocolAccept();
 
-  // 没有实现，不可以被调用
+  // Not implemented, can not be called
   void accept(NetVConnection *, MIOBuffer *, IOBufferReader *);
 
   // Register handler as an endpoint for the specified protocol. Neither
   // handler nor protocol are copied, so the caller must guarantee their
   // lifetime is at least as long as that of the acceptor.
-  // 注册一个与指定协议对应的SessionAccept状态机
-  // 底层是直接调用了 protoset.registerEndpoint(protocol, handler)
+  // Register a SessionAccept state machine corresponding to the specified protocol
+  // The underlying is directly called protoset.registerEndpoint(protocol, handler)
   bool registerEndpoint(const char *protocol, Continuation *handler);
 
   // Unregister the handler. Returns false if this protocol is not registered
   // or if it is not registered for the specified handler.
-  // 注销一个与指定协议对应的SessionAccept状态机
-  // 这个方法没有在ATS中使用，在TSAPI中TSNetAcceptNamedProtocol在调用register失败后会调用unregister方法，但是仅仅针对SSL的情况
-  // 因此在ProtocolProbeSessionAccept中没有unregister方法
-  // 底层是直接调用了 protoset.unregisterEndpoint(protocol, handler)
+  // Unregister a SessionAccept state machine corresponding to the specified protocol
+  // This method is not used in ATS. In TSAPI, TSNetAcceptNamedProtocol will call the unregister method after calling register failure, but only for SSL.
+  // So there is no unregister method in ProtocolProbeSessionAccept
+  // The underlying is directly called protoset.unregisterEndpoint(protocol, handler)
   bool unregisterEndpoint(const char *protocol, Continuation *handler);
 
   SLINK(SSLNextProtocolAccept, link);
 
 private:
-  // 主回调函数
+  // Main callback function
   int mainEvent(int event, void *netvc);
   SSLNextProtocolAccept(const SSLNextProtocolAccept &);            // disabled
   SSLNextProtocolAccept &operator=(const SSLNextProtocolAccept &); // disabled
 
   MIOBuffer *buffer; // XXX do we really need this?
-  // endpoint 指向 NPN / ALPN 无法匹配时，缺省的处理机制。
-  // 对于 SSLNextProtocolAccept 来说，在创建时由调用者传入，通过构造函数设置，
-  //     在 HttpProxyServerMain.cc 中创建 SSLNextProtocolAccept 时传入的是 ProtocolProbeSessionAccept 对象。
-  Continuation *endpoint;
-  // 存储了适用于 NPN / ALPN 协议的，当前注册的所有协议和上层状态机的对应关系
-  SSLNextProtocolSet protoset;
-  // tr-pass 标志
+  // endpoint points to the default processing mechanism when NPN / ALPN cannot match.
+  // For SSLNextProtocolAccept, passed in by the caller at creation time, set by constructor,
+  // The ProtocolProbeSessionAccept object is passed in when SSLNextProtocolAccept is created in HttpProxyServerMain.cc.
+  Continuation *endpoint;
+  // Stores the correspondence between all currently registered protocols and upper state machine for the NPN / ALPN protocol.
+  SSLNextProtocolSet protoset;
+  // tr-pass flag
   bool transparent_passthrough;
 
   friend struct SSLNextProtocolTrampoline;
 };
 ```
 
-## 方法
+## Method
 
 ```
 // 由于不同的event传入的可能是netvc，可能是vio
@@ -92,55 +92,55 @@ ssl_netvc_cast(int event, void *edata)
 int
 SSLNextProtocolAccept::mainEvent(int event, void *edata)
 {
-  // 获取 SSLVC
-  SSLNetVConnection *netvc = ssl_netvc_cast(event, edata);
-  // 这里应该有一个 assert 判断一下 netvc!=NULL
+  // Get SSLVC
+  SSLNetVConnection *netvc = ssl_netvc_cast(event, edata);
+  // There should be an assert here to judge netvc!=NULL
 
   Debug("ssl", "[SSLNextProtocolAccept:mainEvent] event %d netvc %p", event, netvc);
 
   switch (event) {
   case NET_EVENT_ACCEPT:
-    // 通常应该只有NET_EVENT_ACCEPT
+    // Usually should only have NET_EVENT_ACCEPT
     ink_release_assert(netvc != NULL);
 
-    // 设置sslvc的tr-pass状态
+    // Set the tr-pass status of sslvc
     netvc->setTransparentPassThrough(transparent_passthrough);
 
     // Register our protocol set with the VC and kick off a zero-length read to
     // force the SSLNetVConnection to complete the SSL handshake. Don't tell
     // the endpoint that there is an accept to handle until the read completes
     // and we know which protocol was negotiated.
-    // 将当前 支持的协议与上层状态机（protoset）注册到SSLVC
+    // Register the currently supported protocol with the upper state machine (protoset) to SSLVC
     netvc->registerNextProtocolSet(&this->protoset);
-    // 为当前的SSLVC设置“蹦床”，准备跳转到匹配的上层状态机
-    // 这里设置一个 Read VIO，读取 0字节 长度，this->buffer 是在构造函数中创建的
-    // 最后的参数0，对VIO::READ没用。
+    // Set the "boring machine" for the current SSLVC, ready to jump to the matching upper state machine
+    // Set a Read VIO here, read 0 bytes, and this->buffer is created in the constructor.
+    // The last parameter 0 is not useful for VIO::READ
     netvc->do_io(VIO::READ, new SSLNextProtocolTrampoline(this, netvc->mutex), 0, this->buffer, 0);
-    // 设置 sessionAcceptPtr ，但是好像没有用到。
+    // Set sessionAcceptPtr but it doesn't seem to be used.
     netvc->set_session_accept_pointer(this);
     return EVENT_CONT;
   default:
-    // 如果是其它事件，就直接关闭SSLVC
-    // 这里可能会有问题，netvc可能为NULL，如果在ssl_netvc_cast调用的后面有个assert就ok了
+    // If it is another event, just close SSLVC directly
+    // There may be a problem here, netvc may be NULL, if there is an assert after the ssl_netvc_cast call, it is ok
     netvc->do_io(VIO::CLOSE);
     return EVENT_DONE;
   }
 }
 ```
 
-## SSL会话创建流程
+## SSL session creation process
 
-由于 SSL 位于OSI第六层的表示层，在完成加解密动作后要与OSI第七层的应用层对接，因此 ATS 设计了一个“蹦床”的结构来实现从 SSL 到 SPDY，HTTP2，HTTP的跳转过程，因此ATS的实现方式如下：
+Since SSL is located in the presentation layer of OSI layer 6, it needs to interface with the application layer of OSI layer 7 after completing the encryption and decryption operation. Therefore, ATS designed a "trampoline" structure to realize the jump from SSL to SPDY, HTTP2, HTTP. The transfer process, so the implementation of ATS is as follows:
 
-  - 首先，创建 ProtocolProbeSessionAccept 对象，用于支持 80 端口 HTTP，SPDY，HTTP2 的“蹦床”结构
-    - 但是这个方式是需要读取第一个部分的明文（未加密）数据来判断请求的
-    - 有可能判断的不正确
-  - 然后，创建 SSLNextProtocolAccept，用于支持 443 端口 SSL 协议加密的 HTTP，SPDY，HTTP2 的“蹦床”结构
-    - 使用 NPN / ALPN 的方式注册 http，spdy，http/2 三种协议和对应的状态机
-    - 同时把 ProtocolProbeSessionAccept 状态机传入
-    - 这样不支持 NPN / ALPN 协议的客户端就可以用原始的方式判断出应用层的协议类型
+  - First, create a ProtocolProbeSessionAccept object to support the "trampoline" structure of 80-port HTTP, SPDY, and HTTP2.
+    - But this method is to read the first part of the plaintext (unencrypted) data to determine the request
+    - It is possible to judge incorrectly
+  - Then, create an SSLNextProtocolAccept to support the 443 port SSL protocol encryption of HTTP, SPDY, HTTP2 "boring machine" structure
+    - Register http, spdy, http/2 and the corresponding state machine using NPN / ALPN
+    - Also pass in the ProtocolProbeSessionAccept state machine
+    - In this way, the client that does not support the NPN / ALPN protocol can determine the protocol type of the application layer in the original way.
 
-## 关于 new_empty_MIOBuffer 方法
+## About the new_empty_MIOBuffer method
 
 ```
 TS_INLINE MIOBuffer *
@@ -153,7 +153,7 @@ new_empty_MIOBuffer_internal(
 }
 ```
 
-对照 new_MIOBuffer 方法
+Compare the new_MIOBuffer method
 
 ```
 TS_INLINE MIOBuffer *
@@ -166,32 +166,32 @@ new_MIOBuffer_internal(
 }
 ```
 
-可以看到差别就是是否执行了 alloc 的内部方法
+Can see the difference is whether the internal method of alloc is executed
 
-  - alloc 方法是按照 size_index 的要求为 MIOBuffer 分配内存（IOBufferBlock 和 IOBufferData）
-  - 如果不调用 alloc 方法，只是设置了 size_index 的值，则表示在第一次向 MIOBuffer 写入数据的时候，在进行内存的分配。
+  - The alloc method allocates memory (IOBufferBlock and IOBufferData) for MIOBuffer as required by size_index
+  - If you do not call the alloc method, just set the value of size_index, it means that the memory allocation is done when the data is written to MIOBuffer for the first time.
 
-因此，new_empty_MIOBuffer 就是只创建一个 MIOBuffer 的结构，但是不关联 IOBufferBlock 和 IOBufferData。
+Therefore, new_empty_MIOBuffer is a structure that creates only one MIOBuffer, but does not associate IOBufferBlock and IOBufferData.
 
 ## Free Mutex
 
-与 ProtocolProbeSessionAccept 状态机一样，SSLNextProtocolAccept 在构造函数中设置为NULL，表示该状态机被回调时不需要加锁，可以被并发调用。
+Like the ProtocolProbeSessionAccept state machine, SSLNextProtocolAccept is set to NULL in the constructor, indicating that the state machine is called without a lock and can be called concurrently.
 
-虽然定义了 SSLNextProtocolAccept 的析构函数，但是由于 SSLNextProtocolAccept 并不会被释放，因此，析构函数不会在系统运行时被调用。
+Although the destructor for SSLNextProtocolAccept is defined, since the SSLNextProtocolAccept is not released, the destructor is not called when the system is running.
 
 SSLNextProtocolAccept::buffer
 
-  - 在调用 do_io 设置 Read VIO 的时候，需要传入一个 MIOBuffer
-  - 但是 SSLNextProtocolAccept 只是在 SSL握手 之前的一个状态机，因此这个MIOBuffer并没有用处
-  - 只是为了在调用 do_io 的时候可以传入一个符合要求的参数
-  - 所以这里的 buffer 在构造函数中使用了 new_empty_MIOBuffer 来完成初始化
-  - 而且所有的 SSLNextProtocolTrampoline 都共用同一个 buffer
+  - When calling do_io to set up Read VIO, you need to pass in a MIOBuffer
+  - But SSLNextProtocolAccept is just a state machine before the SSL handshake, so this MIOBuffer is not useful.
+  - Just to pass a parameter that meets the requirements when calling do_io
+  - So the buffer here uses new_empty_MIOBuffer in the constructor to complete the initialization.
+  - And all SSLNextProtocolTrampoline share the same buffer
     - netvc->do_io(VIO::READ, new SSLNextProtocolTrampoline(this, netvc->mutex), 0, this->buffer, 0);
-    - 事实上在每一个 sslvc 里的 iobuf 代替了 buffer
+    - In fact, the iobuf in each sslvc replaces the buffer.
 
-最后，对于 SSLNextProtocolTrampoline 状态机的回调，总是异步的。
+Finally, the callback for the SSLNextProtocolTrampoline state machine is always asynchronous.
 
-## 参考资料
+## Reference material
 
 - [P_SSLNextProtocolSet.h](https://github.com/apache/trafficserver/tree/master/iocore/net/P_SSLNextProtocolSet.h)
 - [P_SSLNextProtocolAccept.h](http://github.com/apache/trafficserver/tree/master/iocore/net/P_SSLNextProtocolAccept.h)

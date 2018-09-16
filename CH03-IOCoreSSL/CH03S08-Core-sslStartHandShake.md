@@ -1,53 +1,54 @@
-# 核心组件：sslStartHandShake
+# Core component: sslStartHandShake
 
-在介绍 SSLNetVConnection 之前，要做很多的铺垫，前面介绍的蹦床只是为了实现 NPN 和 ALPN 的协商。
 
-在 SSL/TLS 的协议中，分为 握手过程 和 传输过程，而在传输过程中还会出现 重新协商 的情况。
+Before introducing SSLNetVConnection, there is a lot of work to be done. The trampoline described above is only for the negotiation of NPN and ALPN.
 
-接下来我们先看看与 握手过程 相关的实现：
+In the SSL/TLS protocol, it is divided into a handshake process and a transmission process, and renegotiation occurs during the transmission.
+
+Next we will look at the implementation related to the handshake process:
 
   - ret = sslStartHandShake(SSL_EVENT_SERVER, err);
     - sslServerHandShakeEvent
   - ret = sslStartHandShake(SSL_EVENT_CLIENT, err);
     - sslClientHandShakeEvent
 
-在 SSLNetVConnection 中定义了这三个方法，用来实现 SSL 的握手过程：
+These three methods are defined in SSLNetVConnection to implement the SSL handshake process:
 
-  - 当 ATS 接受一个Client发起的SSL连接时，ATS作为SSL Server，因此调用 sslServerHandShakeEvent 完成握手
-  - 当 ATS 主动向OServer发起SSL连接时，ATS作为SSL Client，因此调用 sslClientHandShakeEvent 完成握手
+  - When ATS accepts a client-initiated SSL connection, ATS acts as an SSL server, so sslServerHandShakeEvent is called to complete the handshake.
+  - When the ATS initiates an SSL connection to the OServer, the ATS acts as the SSL Client, so the sslClientHandShakeEvent is called to complete the handshake.
 
-## 方法
+## Method
 
-### sslStartHandShake 分析
+### sslStartHandShake analysis
 
-sslStartHandShake 用来初始化 SSLNetVC 的成员 ```SSL *ssl;```，在SSL握手中，作为 SSL Client 和/或 SSL Server 需要使用不同的方式来初始化该成员。如果初始化失败，则直接报错返回。
+sslStartHandShake is used to initialize the members of SSLNetVC SSL *ssl;. In the SSL handshake, the SSL Client and/or SSL Server need to be initialized in different ways. If the initialization fails, it will report an error directly.
 
-在完成 ssl 初始化之后，再根据 event 的值调用 sslServerHandShakeEvent 或 sslClientHandShakeEvent 完成后续握手工作。
+After the ssl initialization is completed, sslServerHandShakeEvent or sslClientHandShakeEvent is called according to the value of the event to complete the subsequent handshake.
 
 ```
 int
 SSLNetVConnection::sslStartHandShake(int event, int &err)
 {
-  // 用于记录 SSL 握手开始的时间，可用来判断握手过程是否超时
+  // Used to record the time when the SSL handshake starts. It can be used to determine whether the handshake process times out.
   if (sslHandshakeBeginTime == 0) {
     sslHandshakeBeginTime = Thread::get_hrtime();
     // net_activity will not be triggered until after the handshake
     set_inactivity_timeout(HRTIME_SECONDS(SSLConfigParams::ssl_handshake_timeout_in));
   }
   
-  // 根据 event 来判断握手类型
+  // Determine the type of handshake based on event
   switch (event) {
   case SSL_EVENT_SERVER:
     // ATS 作为 SSL Server
-    if (this->ssl == NULL) {  // 成员 ssl 用来保存 SSL Session 信息，由 OpenSSL 创建
-      // 读取 ssl_multicert.config 配置文件
+    if (this->ssl == NULL) {  // Member ssl is used to save SSL Session information, created by OpenSSL
+      // Read the ssl_multicert.config configuration file
       SSLCertificateConfig::scoped_config lookup;
       IpEndpoint ip;
       int namelen = sizeof(ip);
       safe_getsockname(this->get_socket(), &ip.sa, &namelen);
-      // 根据 ssl_multicert.config 配置文件的信息查找是否与当前的ip存在匹配关系
+      // According to the information of the ssl_multicert.config configuration file, find out whether there is a match with the current ip.
       SSLCertContext *cc = lookup->find(ip);
-      // 输出Debug信息
+      // Output debugging information
       if (is_debug_tag_set("ssl")) {
         IpEndpoint src, dst;
         ip_port_text_buffer ipb1, ipb2;
@@ -63,17 +64,17 @@ SSLNetVConnection::sslStartHandShake(int event, int &err)
       // Escape if this is marked to be a tunnel.
       // No data has been read at this point, so we can go
       // directly into blind tunnel mode
-      // 如果在 ssl_multicert.config 配置文件中定义了与此IP相关的规则，而且action＝tunnel
+      // If the rules related to this IP are defined in the ssl_multicert.config configuration file, and action=tunnel
       if (cc && SSLCertContext::OPT_TUNNEL == cc->opt && this->is_transparent) {
-        // 设置为 Blind Tunnel
+        // Set to Blind Tunnel
         this->attributes = HttpProxyPort::TRANSPORT_BLIND_TUNNEL;
-        // 强制握手过程为完成
+        // Force the handshake process to complete
         sslHandShakeComplete = 1;
-        // 释放 ssl 成员
+        // Release ssl member
         SSL_free(this->ssl);
         this->ssl = NULL;
-        // 返回调用者
-        // 此时这个SSLVC就变成了一个TCP Blind Tunnel，ATS只是在TCP层双向转发数据
+        // Return caller
+        // At this point, the SSLVC becomes a TCP Blind Tunnel, and ATS only forwards data in both directions at the TCP layer.
         return EVENT_DONE;
       }
 
@@ -96,58 +97,58 @@ SSLNetVConnection::sslStartHandShake(int event, int &err)
       }
 #endif
     }
-    // 如果创建 ssl 成员失败，报错并返回错误
+    // If the creation of the ssl member fails, an error is reported and an error is returned.
     if (this->ssl == NULL) {
       SSLErrorVC(this, "failed to create SSL server session");
       return EVENT_ERROR;
     }
 
-    // 最后调用 sslServerHandShakeEvent 进行握手
+    // Finally call sslServerHandShakeEvent to handshake
     return sslServerHandShakeEvent(err);
 
   case SSL_EVENT_CLIENT:
-    // 如果成员 ssl 未创建
+    // If the member ssl is not created
     if (this->ssl == NULL) {
-      // 使用 client_ctx 初始化并创建成员 ssl
+      // Initialize and create a member using client_ctx ssl
       this->ssl = make_ssl_connection(ssl_NetProcessor.client_ctx, this);
     }
 
-    // 如果创建 ssl 成员失败，报错并返回错误
+    // If the creation of the ssl member fails, an error is reported and an error is returned.
     if (this->ssl == NULL) {
       SSLErrorVC(this, "failed to create SSL client session");
       return EVENT_ERROR;
     }
     
-    // 最后调用 sslClientHandShakeEvent 进行握手
+    // Finally call sslClientHandShakeEvent to handshake
     return sslClientHandShakeEvent(err);
 
   default:
-    // 其它情况，异常错误／调用
+    // Other cases, exception error / call
     ink_assert(0);
     return EVENT_ERROR;
   }
 }
 ```
 
-## ATS作为SSL Server时的握手过程
+## Handshake process when ATS is used as SSL Server
 
-### sslServerHandShakeEvent 分析
+### sslServerHandShakeEvent analysis
 
-sslServerHandShakeEvent 主要实现了对 SSL_accept 方法的封装：
+sslServerHandShakeEvent mainly implements the encapsulation of the SSL_accept method:
 
-  - 在调用 SSL_accept 之前，触发 PreAcceptHook，
-  - 处理在 PreAcceptHook 中停留的状态，
-  - 在完成 PreAcceptHook 之后，再通过 SSL_accept 完成握手过程
+  - Triggering PreAcceptHook before calling SSL_accept,
+  - Handling the state of staying in the PreAcceptHook,
+  - After completing the PreAcceptHook, complete the handshake process via SSL_accept
 
-在调用 SSL_accept 完成握手过程时：
+When the handshake process is completed by calling SSL_accept:
 
-  - 会触发 SNI Callback 或者 CERT Callback，
-  - 处理在 SNI/CERT Hook 中停留的状态，
-  - 在完成 SNI/CERT Hook 之后，再继续调用 SSL_accept 完成握手过程
+  - Will trigger SNI Callback or CERT Callback,
+  - Handling the state of staying in the SNI/CERT Hook,
+  - After completing the SNI/CERT Hook, continue to call SSL_accept to complete the handshake process.
 
-上面两处 Hook 的停留状态，都需要在 Hook 中调用 reenable 来触发对 sslServerHandShakeEvent 的再次调用，才能继续。
+The hibernation state of the above two Hooks needs to call reenable in the Hook to trigger the re-invocation of sslServerHandShakeEvent to continue.
 
-需要注意的是，NetHandler在 读事件 和 写事件 时，都会回调 sslServerHandShakeEvent，因此在阅读代码时要同时考虑 读 和 写 两种情况的回调。
+It should be noted that NetHandler will call back sslServerHandShakeEvent when reading events and writing events, so you should consider both the read and write callbacks when reading the code.
 
 ```
 int
@@ -467,67 +468,67 @@ SSLNetVConnection::sslServerHandShakeEvent(int &err)
 }
 ```
 
-### SNI/CERT Hook 的实现
+### Implementation of SNI/CERT Hook
 
-在上面的 sslServerHandShakeEvent 分析中，并未看到 SNI/CERT Hook 的实现部分，只看到了 PreAccept Hook 的实现，那么 SNI/CERT Hook 是如何实现的呢？
+In the above sslServerHandShakeEvent analysis, I did not see the implementation part of SNI/CERT Hook, only saw the implementation of PreAccept Hook, then how is SNI/CERT Hook implemented?
 
-由于在 OpenSSL 1.0.2d 之后提供了 Certificate Callback，但是之前的版本是 SNI Callback，有一定区别，因此在ATS中通过宏定义来实现了对两个不同版本的 OpenSSL 库的兼容。
+Since the Certificate Callback is provided after OpenSSL 1.0.2d, but the previous version is SNI Callback, there is a certain difference. Therefore, the compatibility of two different versions of OpenSSL library is realized by macro definition in ATS.
 
-但是更早期的版本里，好像连 SNI Callback 也没有实现，在 configure 的时候，会检测 ```SSL_CTX_set_tlsext_servername_callback``` 是否可用：
+But the earlier version, it seems that even the SNI Callback did not realize, at configure time, it detects SSL_CTX_set_tlsext_servername_callbackwhether available:
 
-  - 可用，那么定义 TS_USE_TLS_SNI 为 true (1)
-  - 不可用，就定义 TS_USE_TLS_SNI 为 false (0)
+  - Available, then define TS_USE_TLS_SNI to be true (1)
+  - If not available, define TS_USE_TLS_SNI as false (0)
 
-在 Client 连接到 ATS 的 SSL Server 进行握手时，SSL Server 需要下发一个证书给 Client，因此 ATS 规定需要在 ssl_multicert.config 中配置一个规则，指明使用的证书：
+When the client connects to the ATS SSL server to handshake, the SSL server needs to issue a certificate to the client. Therefore, the ATS requires a rule to be configured in ssl_multicert.config to indicate the certificate used:
 
-  - 必须设置 ssl_cert_name=<file.pem>
-    - 当 Client 访问的时候，就会将这个证书提供给客户端
-    - 在加载证书的时候，会根据其内签发的域名来匹配SNI
-  - 其它选项都可以可选的，不是必须配置的
-  - 如果设置 dest_ip=*
-    - 那么对应的证书则作为缺省证书使用，
-    - 当SNI内包含的域名，无法在所有的证书中找到时，则使用这个缺省证书。
-  - 当没有设置 dest_ip=* 的缺省证书时，
-    - 在 SSLParseCertificateConfiguration 方法加载完配置后，会创建一个 dest_ip=* 的记录，但是该记录没有证书。
-    - 那么在找不到证书时，握手就无法建立。
+  - Must set ssl_cert_name=<file.pem>
+    - This certificate will be provided to the client when the Client accesses it.
+    - When the certificate is loaded, it will match the SNI according to the domain name issued within it.
+  - Other options are optional and not mandatory
+  - If set dest_ip=*
+    - Then the corresponding certificate is used as the default certificate.
+    - This default certificate is used when the domain name contained in the SNI cannot be found in all certificates.
+  - When the default certificate for dest_ip=* is not set,
+    - After the configuration is loaded by the SSLParseCertificateConfiguration method, a record of dest_ip=* is created, but the record does not have a certificate.
+    - Then, when the certificate cannot be found, the handshake cannot be established.
 
-对 ssl_multicert.config 的加载和解析过程：
+The loading and parsing process for ssl_multicert.config:
 
   - SSLNetProcessor::start(int number_of_ssl_threads, size_t stacksize)
     - SSLConfig::startup()
-      - 加载 SSL配置到 ConfigProcessor
+      - Load SSL configuration to ConfigProcessor
       - SSLConfig::reconfigure()
       - SSLConfigParams *params = new SSLConfigParams;
-      - params->initialize();  // 这一行负责加载records.config中与SSL相关的配置
-      - 保存 params 到 ConfigProcessor
+      - Params->initialize(); // This line is responsible for loading the SSL-related configuration in records.config
+      - Save params to ConfigProcessor
     - SSLCertificateConfig::startup()
-      - 加载 ssl_multicert.config 里定义的证书信息到 ConfigProcessor
+      - Load the certificate information defined in ssl_multicert.config to ConfigProcessor
       - SSLCertificateConfig::reconfigure()
-        - 声明 SSLConfig::scoped_config params;  // 构造函数从 ConfigProcessor 加载相关配置完成初始化
-        - 声明 SSLCertLookup *lookup = new SSLCertLookup();
-        - 调用 SSLParseCertificateConfiguration(params, lookup)
-        - 保存 lookup 到 ConfigProcessor
+        - Declare SSLConfig::scoped_config params; // Constructor loads the relevant configuration from ConfigProcessor to complete initialization
+        - Declare SSLCertLookup *lookup = new SSLCertLookup();
+        - Call SSLParseCertificateConfiguration(params, lookup)
+        - Save lookup to ConfigProcessor
 
-SSLParseCertificateConfiguration 方法负责：
+The SSLParseCertificateConfiguration method is responsible for
 
-  - 解析 ssl_multicert.config 配置文件
-  - 调用 ssl_store_ssl_context 方法来加载证书
-  - 全部处理完成后，会检查是否已经设置了缺省证书
-  - 如果没有设置，则调用 ssl_store_ssl_context 方法添加一个 空（NULL）证书，作为缺省证书
+  - Parse the ssl_multicert.config configuration file
+  - Call the ssl_store_ssl_context method to load the certificate
+  - After all processing is completed, it will check if the default certificate has been set.
+  - If not set, call the ssl_store_ssl_context method to add a null (NULL) certificate as the default certificate
 
-ssl_store_ssl_context 方法负责
+The ssl_store_ssl_context method is responsible for
 
-  - 向 SSLCertLookup 类型的容器添加域名和证书
-  - 如果添加的证书是一个缺省证书，则会：
-    - 将此证书设置为 SSLCertLookup 类型容器内的缺省证书
-    - 同时调用 ssl_set_handshake_callbacks 方法，设置 SNI/CERT Hook 到 SSL 会话上
+   - Add domain names and certificates to containers of type SSLCertLookup
+   - If the added certificate is a default certificate, then:
+     - Set this certificate to the default certificate in the SSLCertLookup type container
+     - Simultaneously call the ssl_set_handshake_callbacks method to set the SNI/CERT Hook to the SSL session
 
-注意，scoped_config 的定义有两处：
+Note that there are two definitions of scoped_config:
 
-  - SSLConfig::scoped_config
-    - 构造函数从 ConfigProcessor 获取 SSLConfigParams 类型的结构数据，完成初始化
-  - SSLCertificateConfig::scoped_config
-    - 构造函数从 ConfigProcessor 获取 SSLCertLookup 类型的结构数据，完成初始化
+   - SSLConfig::scoped_config
+     - The constructor gets the structure data of type SSLConfigParams from ConfigProcessor and completes the initialization.
+   - SSLCertificateConfig::scoped_config
+     - The constructor gets the structure data of type SSLCertLookup from ConfigProcessor and completes the initialization.
 
 ```
 source: P_SSLConfig.h
@@ -556,9 +557,9 @@ private:
 };
 ```
 
-ssl_set_handshake_callbacks 方法通过宏定义来判定使用哪个 OpenSSL 的API方法来设置 Hook 函数。
+The ssl_set_handshake_callbacks method uses macro definitions to determine which OpenSSL API method to use to set the Hook function.
 
-需要注意的是，如果 TS_USE_TLS_SNI 为 0 的话，那么 ssl_set_handshake_callbacks 就是一个空函数。
+Note that if TS_USE_TLS_SNI is 0, then ssl_set_handshake_callbacks is an empty function.
 
 ```
 source: SSLUtils.cc
@@ -576,26 +577,24 @@ ssl_set_handshake_callbacks(SSL_CTX *ctx)
 }
 ```
 
-下面分别是 ssl_cert_callback 和 ssl_servername_callback 两个回调函数：
-
+The following are the two callback functions ssl_cert_callback and ssl_servername_callback:
   - ssl_cert_callback
-    - 当 OpenSSL 版本大于等于 1.0.2d 的时候，采用Cert Callback
+    - Cert Callback when the OpenSSL version is greater than or equal to 1.0.2d
   - ssl_servername_callback
-    - 否则，采用 SNI Callback
-  - 这两个回调函数都需要确保必须调用，且只调用一次 set_context_cert 方法
-    - 因为 set_context_cert 方法用来设置缺省的证书还有通信加密算法
-    - 而且由于 SNI/CERT Hook 功能的存在，这两个回调函数，可能会被多次回调
-  - 然后再回调 SNI/CERT Hook
+    - Otherwise, use SNI Callback
+  - Both callback functions need to ensure that they must be called, and only the set_context_cert method is called once.
+    - Because the set_context_cert method is used to set the default certificate and communication encryption algorithm.
+    - And because of the existence of the SNI/CERT Hook function, these two callback functions may be called back multiple times.
+  - Then call back the SNI/CERT Hook
 
-而 set_context_cert 方法是两个回调函数的公共部分：
+The set_context_cert method is the public part of the two callback functions:
 
   - set_context_cert
-    - 由上面两个方法调用，用来设置默认的SSL证书信息
-    - 首先根据 Server Name 在 SSLCertLookup 中查找，
-    - 如果找不到，再根据 IP 查找。
+    - Called by the above two methods to set the default SSL certificate information.
+    - First look up in SSLCertLookup based on Server Name,
+    - If not found, look it up based on IP.
 
-同样，如果 TS_USE_TLS_SNI 为 0 的话，上面这三个方法就不会被定义出来。
-
+Similarly, if TS_USE_TLS_SNI is 0, the above three methods will not be defined.
 
 ```
 source: SSLUtils.cc
@@ -788,13 +787,13 @@ done:
 #endif /* TS_USE_TLS_SNI */
 ```
 
-### SNI/CERT Hook 的回调
+### Callback for SNI/CERT Hook
 
-在 SSLVC 中，PRE ACCEPT Hook 与 SNI/CERT Hook 的回调处理都是特殊的方式。
+In SSLVC, the callback handling of PRE ACCEPT Hook and SNI/CERT Hook is a special way.
 
-在 sslServerHandShakeEvent 中已经介绍了 PRE ACCEPT Hook 的回调，下面是对 SNI/CERT Hook 的回调进行分析。
+The callback of the PRE ACCEPT Hook has been introduced in sslServerHandShakeEvent. The following is an analysis of the callback of the SNI/CERT Hook.
 
-抵达 callHooks 方法的调用栈如下：
+The call stack to the callHooks method is as follows:
 
   - SSLAccept()
     - SSL_accept()
@@ -855,7 +854,7 @@ SSLNetVConnection::callHooks(TSHttpHookID eventId)
 }
 ```
 
-需要注意 SSLNetVConnection::reenable() 方法是多态的，下面这个才是 TSAPI TSVConnReenable(ssl_vc) 调用的那个：
+Note that the SSLNetVConnection::reenable() method is polymorphic. The following is the one called by TSAPI TSVConnReenable(ssl_vc):
 
 ```
 void
@@ -887,37 +886,38 @@ SSLNetVConnection::reenable(NetHandler *nh)
 }
 ```
 
-## ATS作为SSL Client时的握手过程
+## Handshake process when ATS is used as SSL Client
 
-首先简单说一下 SSLInitClientContext() , 在该方法中：
 
-  - 设置了 SSL 协议的版本
+First, let's talk briefly about SSLInitClientContext() , in this method:
+
+  - Set the version of the SSL protocol
     - SSL_CTX_set_options(client_ctx, params->ssl_client_ctx_protocols)
-  - 设置了加密算法
+  - Encryption algorithm
     - SSL_CTX_set_cipher_list(client_ctx, params->client_cipherSuite)
-  - 设置了 verify_callback 函数
+  - Set the verify_callback function
     - SSL_CTX_set_verify(client_ctx, SSL_VERIFY_PEER, verify_callback)
-    - 在需要对 OServer 的证书进行验证时，通过这个 verify_callback 进行验证
+    - Verification by this verify_callback when the OServer certificate needs to be verified
     - SSL_CTX_set_verify_depth(client_ctx, params->client_verify_depth)
-    - 证书链存在时，还可以指定验证的深度
-  - 如果设置了向OServer提供客户端证书的功能
+    - When the certificate chain exists, you can also specify the depth of verification.
+  - If the function of providing a client certificate to OServer is set
     - SSL_CTX_use_certificate_chain_file(client_ctx, params->clientCertPath)
     - SSL_CTX_use_PrivateKey_file(client_ctx, clientKeyPtr, SSL_FILETYPE_PEM)
     - SSL_CTX_check_private_key(client_ctx)
-    - 加载客户端证书，加载客户端私钥，验证客户端证书和私钥的匹配性
-  - 初始化了 ssl_client_data_index
-    - 用来在 SSL 会话描述符中申请一个内存块，此index表示内存块的编号
-    - 对于可以通过此index值来存／取该内存块的数据
-    - 在 SSL 会话描述符中有多个这样的内存块，可以存储应用层的数据
-    - 参考：https://www.mail-archive.com/openssl-users@openssl.org/msg52326.html
+    - Load the client certificate, load the client private key, and verify the match between the client certificate and the private key.
+  - Initialized ssl_client_data_index
+    - Used to request a memory block in the SSL session descriptor. This index represents the number of the memory block.
+    - For data that can be stored/fetched by this index value
+    - There are multiple such memory blocks in the SSL session descriptor that can store data at the application layer.
+    - Reference: https://www.mail-archive.com/openssl-users@openssl.org/msg52326.html
 
-SSLInitClientContext() 被 SSLNetProcessor::start() 调用，因此在 ET_SSL 启动之前就完成了初始化设置。
+SSLInitClientContext() is called by SSLNetProcessor::start(), so the initialization is done before ET_SSL starts.
 
-### sslClientHandShakeEvent 分析
+### sslClientHandShakeEvent analysis
 
-sslClientHandShakeEvent 主要实现了：
+The main implementation of sslClientHandShakeEvent is:
 
-  - ATS 作为 SSL Client 向 OServer 发起一个 SSL Handshake 的功能
+  - ATS acts as an SSL Client to initiate an SSL Handshake to OServer
   
 ```
 int
@@ -1032,20 +1032,20 @@ SSLNetVConnection::sslClientHandShakeEvent(int &err)
 }
 ```
 
-### OServer 证书的验证过程
+### OServer certificate verification process
 
-如果在ATS的records.config中开启了OServer证书链验证：
+If OServer certificate chain verification is enabled in the ATS records.config:
 
 ```
 CONFIG proxy.config.ssl.client.verify.server INT 1
 ```
 
-那么，ATS在拿到OServer的证书后，会对证书链进行验证，证书链的验证结果保存到 preverify_ok 中：
+Then, after obtaining the certificate of OServer, ATS will verify the certificate chain, and the verification result of the certificate chain is saved to preverify_ok:
 
-  - 0 表示证书链存在问题
-  - 1 表示证书链验证通过
+  - 0 means there is a problem with the certificate chain
+  - 1 means certificate chain verification passed
 
-然后回调 verify_callback() 进行域名匹配验证。
+Then call adjust_callback() to verify the domain name match.
 
 ```
 source: SSLClientUtils.cc
@@ -1125,7 +1125,7 @@ verify_callback(int preverify_ok, X509_STORE_CTX *ctx)
 }
 ```
 
-# 参考
+# reference
 
   - [OpenSSL::SSL_accept](https://www.openssl.org/docs/manmaster/ssl/SSL_accept.html)
   - [OpenSSL::SSL_get_rbio](https://www.openssl.org/docs/manmaster/ssl/SSL_get_rbio.html)

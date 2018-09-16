@@ -1,51 +1,50 @@
-# 概述
+# Overview
 
-EventSystem 和 Net Sub-System 作为ATS的基础架构，
+EventSystem and Net Sub-System are the infrastructure of ATS.
+  - Ability to accept connections from Clients via NetAccept
+  - Ability to initiate a connection to the server via NetProcessor
+  - Ability to read and write data via NetHandler
 
-  - 通过 NetAccept 实现了接受来自 Client 连接的能力
-  - 通过 NetProcessor 实现了发起连接到 Server 的能力
-  - 通过 NetHandler 实现了读写数据的能力
+So how do you support various communication protocols?
 
-那么，如何支持各种通信协议呢？
+In TCP communication, it is necessary to first determine which protocol is used in TCP communication, and then select the state machine of the corresponding protocol to handle this TCP communication.
 
-在 TCP 通信中，需要首先判断出在 TCP 通信里采用哪一种协议，然后才能选择对应协议的状态机来处理这个 TCP 通信。
-
-在前面的章节，分别介绍了两个重要的组件：
+In the previous chapters, two important components were introduced:
 
   - SSLNextProtocolTrampoline
-    - 通过 NPN / ALPN 协议来获得 SSL 通道内即将进行的通信协议的类型
+    - Obtain the type of communication protocol to be committed in the SSL channel through the NPN / ALPN protocol
   - ProtocolProbeTrampoline
-    - 通过读取 Client 发送来的第一个数据内容，进行分析后，得到即将进行的通信协议的类型
+    - After reading the first data content sent by the client and analyzing it, the type of the upcoming communication protocol is obtained.
 
-注：有一些协议（例如：SMTP协议），无法通过ProtocolProbeTrampoline进行协议类型的判断。
+Note: There are some protocols (for example: SMTP protocol), and the protocol type cannot be judged by ProtocolProbeTrampoline.
 
-  - Client端连接到Server之后，Client不会发送任何信息，
-  - 而是Server端首先要发送内容给Client端。
+  - After the client connects to the server, the client does not send any information.
+  - Instead, the server first sends the content to the client.
 
-通过上面的两个组件，就可以知道接下来要进行通信的协议类型了，然后按照以下的流程进行：
+Through the above two components, you can know the type of protocol to be communicated next, and then follow the following process:
 
-  - 把 netvc 传递给对应该协议的 XXXSessionAccept 类实例（如：HttpSessionAccept）
-  - XXXSessionAccept 类实例创建 XXXClientSession 类实例（如：HttpClientSession）
-  - XXXClientSession 类实例创建 XXXSM 类实例（如：HttpSM），并将 netvc 传递给 XXXSM
-  - XXXSM 类实例发起到 OServer 的连接，并创建对应的 netvc
-  - XXXSM 类实例创建 XXXServerSession 类实例（如：HttpServerSession），并传入新建的 netvc
+  - Pass netvc to the XXXSessionAccept class instance corresponding to the protocol (eg HttpSessionAccept)
+  - The XXXSessionAccept class instance creates an instance of the XXXClientSession class (eg HttpClientSession)
+  - The XXXClientSession class instance creates an instance of the XXXSM class (eg HttpSM) and passes netvc to XXXSM
+  - The XXXSM class instance initiates a connection to OServer and creates a corresponding netvc
+  - The XXXSM class instance creates an instance of the XXXServerSession class (eg HttpServerSession) and passes in the newly created netvc
 
-上面多种类对象，都将共享 Client 端 netvc 的 mutex：
+The above various types of objects will share the mutex of the client side netvc:
 
   - XXXClientSession
   - XXXSM
-  - Server 端 netvc
+  - Server end netvc
   - XXXServerSession
 
-在完成一次通信之后：
+After completing a communication:
 
-  - XXXSM 会将 XXXServerSession 剥离（release / deattach）
-    - 会根据 OServer 是否支持连接复用的情况，来决定是否同时关闭与 OServer 连接的 netvc
-  - 然后 XXXSM 会将 netvc 传递回 XXXClientSession，然后将自己删除
-  - 然后 XXXClientSession 会等待下一个请求的到来，或者是连接的关闭
+  - XXXSM will strip XXXServerSession (release / deattach)
+    - According to whether OServer supports connection multiplexing, it is decided whether to close the netvc connected to OServer at the same time.
+  - XXXSM then passes netvc back to XXXClientSession and then deletes itself
+  - Then XXXClientSession will wait for the next request to come, or the connection is closed.
 
-接下来将会对 XXXSessionAccept 和 XXXClientSession 进行详细的介绍
+Next, a detailed introduction to XXXSessionAccept and XXXClientSession will be given.
 
-  - 对于 XXXServerSession 的介绍，将会留到 SessionPool 的部分再一起详细的说明。
-  - 对于 XXXSM 的介绍，将会有单独的章节进行分析。
+  - The introduction to XXXServerSession will be left to the section of SessionPool and then detailed description.
+  - For the introduction of XXXSM, there will be separate chapters for analysis.
 

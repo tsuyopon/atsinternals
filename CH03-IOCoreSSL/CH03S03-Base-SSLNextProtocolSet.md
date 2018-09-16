@@ -1,13 +1,13 @@
-# 基础部件：SSLNextProtocolSet
+# Base component: SSLNextProtocolSet
 
-为了实现 NPN 与 ALPN，ATS定义了SSLNextProtocolSet来支持对多种协议的处理。
+In order to implement NPN and ALPN, ATS defines SSLNextProtocolSet to support the processing of multiple protocols.
 
-SSLNextProtocolSet 主要用来生成支持的协议列表
+SSLNextProtocolSet is mainly used to generate a list of supported protocols.
 
-  - 通过register和unregister方法添加和删除支持的协议
-  - 每次添加、删除（bug？）之后都会重新按照 NPN 和／或 ALPN 的要求生成支持的的协议列表 npn，长度为 npnsz
-  - 通过 advertise 来获取生成好的协议列表，在 NPN 和／或 ALPN 交互时使用
-  - 通过 find 来寻找与特定协议对应的状态机
+   - Add and remove supported protocols via register and unregister methods
+   - After each addition, deletion (bug?), the list of supported protocols npn is generated according to the requirements of NPN and/or ALPN, and the length is npnsz.
+   - Use advertise to get a list of generated protocols for use when interacting with NPN and/or ALPN
+   - Find the state machine corresponding to a specific protocol by find
 
 ## 定义
 
@@ -15,47 +15,47 @@ SSLNextProtocolSet 主要用来生成支持的协议列表
 class SSLNextProtocolSet
 {
 public:
-  // 构造函数
-  // 初始化 npn=NULL，npnsz=0 
+  // Constructor
+  // Initialize npn=NULL, npnsz=0
   SSLNextProtocolSet();
-  // 析构函数
-  // 释放npn的内存，然后遍历 endpoints 链表，逐个delete链表上的元素
+  // Destructor
+  // Release the npn memory, and then traverse the endpoints linked list, one by one delete the elements on the linked list
   ~SSLNextProtocolSet();
 
-  // 注册一个状态机和支持的协议串
-  // 不能对同一个协议重复注册
-  // 注册一个新协议的时候，会new NextProtocolEndpoint并放入endpoints链表中
-  // true=成功注册，遍历 endpoints 生成最新的 npn 和 npnsz
-  // false=注册失败，协议已经注册 或 协议串超过255字节
+  // Register a state machine and supported protocol strings
+  // Cannot double registration for the same protocol
+  // When registering a new protocol, it will be a new NextProtocolEndpoint and placed in the endpoints list.
+  // true=Successful registration, traversing endpoints to generate the latest npn and npnsz
+  // false=registration failed, the protocol has been registered or the protocol string exceeds 255 bytes
   bool registerEndpoint(const char *, Continuation *);
-  // 注销一个状态机和支持的协议串
-  // 遍历 endpoints，比对协议字符串，找到要注销的就直接调用 endpoints 链表的remove方法删除
-  // true=成功注销
-  // false=注销失败，没有找到要注销的协议字符串
-  // 这里存在一个内存泄漏：在从链表remove掉元素之后，没有通过delete方法释放该元素占用的内存
-  // 这里还有一个bug：没有刷新 npn 和 npnsz
-  // 不过，纵观整个ATS的代码，好像没有任何组件调用过这个注销方法～
+  // Unregister a state machine and supported protocol strings
+  // Traverse the endpoints, compare the protocol string, find the to delete, directly call the remove method of the endpoints list to delete
+  // true=Successfully logged out
+  // false=logout failed, no protocol string was found to be logged out
+  // There is a memory leak: after removing the element from the linked list, the memory occupied by the element is not freed by the delete method.
+  // There is a bug here: no refresh npn and npnsz
+  // However, looking at the entire ATS code, it seems that no component has called this logout method~
   bool unregisterEndpoint(const char *, Continuation *);
-  // 获取当前的 npn 和 npnsz，分别存入 *out 和 *len
-  // true=成功，false=当前没有npn和npnsz
-  // 其后有const关键词，表示此函数不会修改类成员的值
+  // Get the current npn and npnsz and store them in *out and *len respectively
+  // true=success, false=currently no npn and npnsz
+  // followed by a const keyword indicating that this function does not modify the value of the class member
   bool advertiseProtocols(const unsigned char **out, unsigned *len) const;
-  // 遍历 endpoints 链表，逐个比对协议名称
-  // 返回该链表中完全匹配的那个NextProtocolEndpoint类型的对象内的 endpoint 成员
-  // 返回NULL表示链表中没有匹配的NextProtocolEndpoint类型的对象
-  // 其后有const关键词，表示此函数不会修改类成员的值
+  // Traverse the endpoints list and compare the protocol names one by one
+  // returns the endpoint member in the object of the NextProtocolEndpoint type that exactly matches the list
+  // returns NULL to indicate that there is no matching NextProtocolEndpoint object in the list.
+  // followed by a const keyword indicating that this function does not modify the value of the class member
   Continuation *findEndpoint(const unsigned char *, unsigned) const;
 
   struct NextProtocolEndpoint {
     // NOTE: the protocol and endpoint are NOT copied. The caller is
     // responsible for ensuring their lifetime.
-    // 构造函数
-    // 成员protocol指向传入的参数protocol
-    // 成员endpoint指向传入的参数endpoint
-    // 由于没有进行copy操作，所以调用者要确保传入的参数指向的对象不被释放
+    // Constructor
+    // member protocol points to the passed parameter protocol
+    // member endpoint points to the passed in parameter endpoint
+    // Since there is no copy operation, the caller must ensure that the object pointed to by the passed argument is not released.
     NextProtocolEndpoint(const char *protocol, Continuation *endpoint);
-    // 析构函数
-    // 没有任何操作的空函数，因为不需要回收资源等
+    // Destructor
+    // There is no empty function for any operation, because there is no need to recycle resources, etc.
     ~NextProtocolEndpoint();
 
     const char *protocol;
@@ -69,18 +69,18 @@ private:
   SSLNextProtocolSet(const SSLNextProtocolSet &);            // disabled
   SSLNextProtocolSet &operator=(const SSLNextProtocolSet &); // disabled
 
-  // mutable 关键词好像是为了对应advertiseProtocols和findEndpoint两个方法
-  // 但是感觉没有什么必要？
+  // The mutable keyword seems to be in order to correspond to the two methods advertiseProtocols and findEndpoint
+  // But it doesn't feel necessary?
   mutable unsigned char *npn;
   mutable size_t npnsz;
 
-  // 定义一个双向链表
-  // 这里为啥不用 DLL<NextProtocolEndpoint> endpoints; ？非要用个typedef ？
+  // Define a doubly linked list
+  // Here is no need for DLL<NextProtocolEndpoint> endpoints; ? Do you have to use a typedef?
   NextProtocolEndpoint::list_type endpoints;
 };
 ```
 
-## 参考资料
+## Reference material
 
 - [P_SSLNextProtocolSet.h](http://github.com/apache/trafficserver/tree/master/iocore/net/P_SSLNextProtocolSet.h)
 - [SSLNextProtocolSet.cc](http://github.com/apache/trafficserver/tree/master/iocore/net/SSLNextProtocolSet.cc)
