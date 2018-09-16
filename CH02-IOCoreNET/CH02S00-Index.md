@@ -1,49 +1,50 @@
-# 第二章 I/O核心：网络
+# Chapter 2 I/O Core: Network
 
-根据对事件系统的了解，设计一个状态机，只需要接收来自事件系统的事件通知即可：
+According to the understanding of the event system, design a state machine, only need to receive event notifications from the event system:
 
   - EVENT_IMMEDIATE
   - EVENT_INTERVAL
 
-所以状态机总是被动的接收“通知”，但是我们知道，对于 Socket 来说，至少在 Linux 系统上并没有这种通知机制。
+So the state machine always receives "notifications" passively, but we know that for Sockets, there is no such notification mechanism on at least Linux systems.
 
-我们拥有的机制是 “polling”，需要应用程序主动发起 syscall 来判断哪些 Socket 有数据可读，哪些 Socket 是可以写入数据的。
+The mechanism we have is "polling", which requires the application to initiate syscall to determine which Sockets have data to read and which Sockets can write data.
 
-这就需要设计一个把主动“polling”转换为事件的网络子系统（Net Sub-System），这个功能由 NetHandler 状态机来实现。
+This requires designing a network subsystem (Net Sub-System) that converts the active "polling" into an event. This function is implemented by the NetHandler state machine.
 
-同时，在一个 “polling” 为基础的网络子系统中，新连接的进入由 NetAccept 状态机来实现，NetAccept 可以运行在两种模式下：
+At the same time, in a "polling"-based network subsystem, the entry of new connections is implemented by the NetAccept state machine, which can run in two modes:
 
-  - 阻塞模式
-    - 在 DEDICATED EThread 中以阻塞方式调用 accept()，实现接受新连接
-  - 非阻塞模式
-    - 在 REGULAR EThread 中以非阻塞方式调用 accept()，实现接受新连接
 
-另外，我们还需要对处于空闲状态的 Socket 连接进行超时管理，这个功能由 InactivityCop 状态机来实现。
+  - Blocking mode
+    - Call accept() in blocking mode in DEDICATED EThread to accept new connections
+  - Non-blocking mode
+    - Call accept() in non-blocking mode in REGULAR EThread to accept new connections
 
-为了实现上述功能，还有一些必要的基础部件和其它部件来配合，因此整个网络子系统（Net Sub-System）由以下部分组成：
+In addition, we also need to manage the timeout of the Socket connection in idle state. This function is implemented by the InactivityCop state machine.
 
-  - 基础部件
-    - Polling 子系统
-      - EventIO（对 epoll/kqueue 方法的封装，相当于PollingEvent 和 PollingProcessor）
-      - PollDescriptor（用来抽象 epoll/kqueue 的句柄）
-      - PollCont（周期性执行 polling 操作的状态机）
-    - NetVConnection（用来连接 Socket，缓冲区 和 状态机）
-      - 继承自 VConnection 基类
-    - IOBuffer（用于存放数据的缓冲区）
-    - VIO（用来描述 Socket 读写操作）
-    - 对 “Socket操作” 的封装
+In order to achieve the above functions, there are some necessary basic components and other components to cooperate, so the entire network subsystem (Net Sub-System) consists of the following parts:
+
+  - Basic component
+    - Polling subsystem
+      - EventIO (encapsulation of the epoll/kqueue method, equivalent to PollingEvent and PollingProcessor)
+      - PollDescriptor (used to abstract the handle of epoll/kqueue)
+      - PollCont (state machine that periodically performs polling operations)
+    - NetVConnection (used to connect Socket, buffer and state machine)
+      - Inherited from the VConnection base class
+    - IOBuffer (buffer for storing data)
+    - VIO (used to describe Socket read and write operations)
+    - Encapsulation of "Socket operation"
       - Connection
       - Server
-  - 核心部件
-    - NetAccept（实现接受新连接的状态机）
-    - NetHandler（实现从 “polling” 到事件转换的状态机）
-    - InactivityCop（实现连接的超时控制）
-    - Throttle（实现最大连接的限定）
-    - UnixNetVConnection（NetVConnection在Unix操作系统上的具体实现）
-      - 继承自 NetVConnection 基类
-    - 实现协议类型的探测
+  - Core components
+    - NetAccept (implementation of state machine accepting new connections)
+    - NetHandler (implementing a state machine from "polling" to event conversion)
+    - InactivityCop (timeout control for implementing connections)
+    - Throttle (limitation to achieve maximum connection)
+    - UnixNetVConnection (NetVConnection implementation on Unix operating system)
+      - Inherited from the NetVConnection base class
+    - Implement protocol type detection
       - ProtocolProbeSessionAccept
       - ProtocolProbeTrampoline
-  - 对外接口
+  - External Interface
     - UnixNetProcessor
-      - 继承自 NetProcessor 基类
+      - Inherited from NetProcessor base class

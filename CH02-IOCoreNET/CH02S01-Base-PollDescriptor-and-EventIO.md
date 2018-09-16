@@ -1,23 +1,23 @@
-# 基础组件：PollDescriptor 和 EventIO
+# Base components: PollDescriptor and EventIO
 
-PollDescriptor 是对多种平台上的I/O Poll操作的封装，目前ATS支持epoll，kequeu，port三种。
+PollDescriptor is a package for I/O Poll operations on multiple platforms. At present, ATS supports epoll, kequeu, and port.
 
-我们可以把 PollDescriptor 看成是一个队列：
+We can think of PollDescriptor as a queue:
 
-- 把 Socket FD 放入 poll fd / PollDescriptor 队列
-- 然后通过 Polling 操作，从 poll fd / PollDescriptor 队列中批量取出一部分 Socket FD
-- 而且这是一个原子队列
+- Put Socket FD into the poll fd / PollDescriptor queue
+- Then take a batch of Socket FD from the poll fd / PollDescriptor queue through the Polling operation.
+- And this is an atomic queue
 
-EventIO 是 PollDescriptor 队列的成员，也是 PollDescriptor 对外提供的接口：
+EventIO is a member of the PollDescriptor queue and is the external interface provided by the PollDescriptor:
 
-- 为每一个 Socket FD 提供一个 EventIO，把 Socket FD 封装到 EventIO 内
-- 提供把 EventIO 自身放入 PollDescriptor 队列的接口
+- Provide an EventIO for each Socket FD and encapsulate the Socket FD into EventIO
+- Provides an interface to put EventIO itself into the PollDescriptor queue
 
-以下内容仅仅分析对epoll ET模式支持的实现。
+The following only analyzes the implementation of support for the epoll ET mode.
 
-## 定义
+## definition
 
-重温一下linux pollfd的结构，下面会用到
+Revisit the structure of linux pollfd, which will be used below.
 
 ```
 source: man 2 poll
@@ -28,7 +28,7 @@ struct pollfd {
 };
 ```
 
-重温一下linux epoll_event的结构，下面会用到
+Revisit the structure of linux epoll_event, which will be used below.
 
 ```
 source: man 2 epoll_wait
@@ -45,13 +45,13 @@ struct epoll_event {
 };
 ```
 
-首先是PollDescriptor，它包含 Poll 句柄和保存结果集的数组。
+The first is the PollDescriptor, which contains the array of handles and an array of saved result sets.
 
 ```
 source: iocore/net/P_UnixPollDescriptor.h
-// 定义一个PollDescriptor可以处理的最大描述符的数量。
-// 这里定义为32K＝32768 = 0x10000，如果要修改这个值，也建议采用16的整数倍，
-//     以保证在存储这些数据时实现内存边界的对齐。
+// Define the maximum number of descriptors a PollDescriptor can handle.
+// This is defined as 32K=32768 = 0x10000. If you want to modify this value, it is also recommended to use an integer multiple of 16.
+// to ensure alignment of memory boundaries when storing this data.
 #define POLL_DESCRIPTOR_SIZE 32768
 
 typedef struct pollfd Pollfd;
@@ -59,36 +59,36 @@ typedef struct pollfd Pollfd;
 struct PollDescriptor {
   int result; // result of poll
 #if TS_USE_EPOLL
-  // 用于保存epoll_create创建的epoll fd
+  // Used to save the epoll fd created by epoll_create
   int epoll_fd;
 
-  // nfds 和 pfd在TCP的部分没有用到，目前应该只有UDP里才会使用。
-  // 记录有多少fd被添加到了epoll fd中
-  int nfds; // actual number
-  // 每一个fd被添加到epoll fd之前会保存到pfd这个数组里
-  Pollfd pfd[POLL_DESCRIPTOR_SIZE];
+  // nfds and pfd are not used in the TCP section and should only be used in UDP.
+  // Record how many fd are added to epoll fd
+  Int nfds; // actual number
+  // Each fd is saved to the pfd array before being added to epoll fd
+  Pollfd pfd[POLL_DESCRIPTOR_SIZE];
 
-  // 用来保存epoll_wait返回的fd状态集，result中保存了实际的fd数量
-  // 为什么在epoll_wait处使用函数内部变量，而要固定分配一个内存区域呢？
-  //     由于epoll_wait需要非常高频率的运行，因此这个内存区域需要非常高频次的分配和释放，
-  //     即使在函数内定义为内部数组变量，那么也会频繁的从栈里分配空间，
-  //     所以不如分配一个固定的内存区域
+   // used to save the fd state set returned by epoll_wait, the actual number of fd saved in result
+   // Why use function internal variables in epoll_wait, but to allocate a memory area fixedly?
+   // Since epoll_wait requires very high frequency operation, this memory area requires very high frequency allocation and release.
+   // Even if it is defined as an internal array variable within a function, it will allocate space from the stack frequently.
+   // So it's better to allocate a fixed memory area
   struct epoll_event ePoll_Triggered_Events[POLL_DESCRIPTOR_SIZE];
 #endif
 #if TS_USE_EPOLL
-  // 下面四个宏定义是一组通用方法，对于kqueue等其它系统的I/O poll操作也都是抽象为这四个方法
-  // 获取I/O poll描述符，对于epoll就是epoll fd
+  // The following four macro definitions are a common set of methods, and the I/O poll operations for other systems such as kqueue are also abstracted into these four methods.
+  // Get the I / O poll descriptor, for epoll is epoll fd
 #define get_ev_port(a) ((a)->epoll_fd)
-  // 获取指定fd当前的事件状态，在epoll_wait之后通过这个方法获取返回的fd的事件状态
+  // Get the current event state of the specified fd, get the event status of the returned fd through this method after epoll_wait
 #define get_ev_events(a, x) ((a)->ePoll_Triggered_Events[(x)].events)
-  // 获取指定fd绑定的数据指针，对于epoll就是epoll_event结构体的data.ptr
+  // Get the data pointer of the specified fd binding, for epoll is the data.ptr of the epoll_event structure
 #define get_ev_data(a, x) ((a)->ePoll_Triggered_Events[(x)].data.ptr)
-  // 准备获取下一个fd，对于epoll来说这里没啥对应的操作
+  // Prepare to get the next fd, there is no corresponding operation for epoll
 #define ev_next_event(a, x)
 #endif
 
-  // 从pfd中分配一个地址空间
-  // 仅用于epoll对UDP的支持，如使用kqueue等其它系统的I/O poll操作，则直接返回NULL
+  // allocate an address space from pfd
+  // Only used for epoll support for UDP, such as using I/O poll operations of other systems such as kqueue, returning NULL directly
   Pollfd *
   alloc()
   {
@@ -103,8 +103,8 @@ struct PollDescriptor {
 #endif
   }
 private:
-  // 初始化 epoll fd 及事件数组
-  // 返回当前PollDescriptor
+  // Initialize epoll fd and event array
+  // return the current PollDescriptor
   PollDescriptor *
   init()
   {
@@ -119,12 +119,12 @@ private:
   }
 
 public:
-  // 构造函数，调用init()完成初始化
+  // Constructor, call init() to complete initialization
   PollDescriptor() { init(); }
 };
 ```
 
-然后是EventIO，向poll fd添加文件句柄，以及修改fd事件状态
+Then EventIO, add a file handle to poll fd, and modify the fd event status.
 
 ```
 source:iocore/net/P_UnixNet.h
@@ -156,7 +156,7 @@ struct EventIO {
   int start(EventLoop l, UnixNetVConnection *vc, int events);
   int start(EventLoop l, UnixUDPConnection *vc, int events);
 
-  // 底层定义，不应该直接调用
+  // Underlying definition, should not be called directly
   int start(EventLoop l, int fd, Continuation *c, int events);
 
   // Change the existing events by adding modify(EVENTIO_READ)
@@ -176,11 +176,11 @@ struct EventIO {
 };
 ```
 
-## 方法
+## Method
 
 ### start
 
-在需要将一个文件描述符以及文件描述符的延伸（NetVC，UDPVC，DNSConn，NetAccept）添加到PollDescriptor时，可以通过EventIO提供的start方法：
+When you need to add a file descriptor and file descriptor extension (NetVC, UDPVC, DNSConn, NetAccept) to the PollDescriptor, you can use the start method provided by EventIO:
 
 - start(EventLoop l, DNSConnection *vc, int events)
    - type = EVENTIO_DNS_CONNECTION
@@ -191,15 +191,15 @@ struct EventIO {
 - start(EventLoop l, UnixUDPVConnection *vc, events)
    - type = EVENTIO_UDP_CONNECTION
 
-上面这四个方法，都会设置成员type的值，最终都是调用基础方法：
+The above four methods will set the value of the member type, and finally call the basic method:
 
 - start(EventLoop l, int afd, Continuation *vc, events)
-- 这个基础方法是支持多种IO Poll平台的，如：epoll，kqueue，port
-- 这个方法通常不应该被直接调用，因为这个方法没有对type进行设置
-- 参数说明：
-   - EventLoop实际是poll fd的封装PollDescriptor
-   - Continuation则用于回调
-   - events表示所关注的事件，通常应该使用：EVENTIO_READ，EVENTIO_WRITE，EVENTIO_ERROR三者之一或者他们的“或”值
+- This basic method is to support multiple IO Poll platforms, such as: epoll, kqueue, port
+- This method should usually not be called directly because this method does not set the type.
+- Parameter Description:
+   - EventLoop is actually a packaged PollDescriptor for poll fd.
+   - Continuation is used for callbacks
+   - Events indicates the event of interest, usually should use one of: EVENTIO_READ, EVENTIO_WRITE, EVENTIO_ERROR or their "or" value
 
 ```
 TS_INLINE int
@@ -216,8 +216,8 @@ EventIO::start(EventLoop l, int afd, Continuation *c, int e)
 #ifndef USE_EDGE_TRIGGER
   events = e;
 #endif
-  // 最后调用epoll_ctl把ev添加到epoll fd的事件池中，然后可以通过epoll_wait获取结果
-  // 在ev中包含了指向该EventIO实例的指针，在每一个UnixNetVConnection里都有一个EventIO类型的成员。
+  // Finally, call epoll_ctl to add ev to the event pool of epoll fd, and then get the result via epoll_wait
+  // A pointer to the EventIO instance is included in the ev, and there is a member of the EventIO type in each UnixNetVConnection.
   return epoll_ctl(event_loop->epoll_fd, EPOLL_CTL_ADD, fd, &ev);
 #endif
 }
@@ -225,7 +225,7 @@ EventIO::start(EventLoop l, int afd, Continuation *c, int e)
 
 ### stop
 
-对应start方法的则是stop方法，stop方法只有epoll和port的实现，没有kqueue的处理（我对kqueue不熟悉，不知道为何这里没有针对kqueue的处理）：
+The corresponding start method is the stop method, the stop method is only the implementation of epoll and port, there is no kqueue processing (I am not familiar with kqueue, I don't know why there is no processing for kqueue here):
 
 ```
 TS_INLINE int
@@ -237,10 +237,10 @@ EventIO::stop()
     struct epoll_event ev;
     memset(&ev, 0, sizeof(struct epoll_event));
     ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
-    // 通过epoll_ctl从epoll fd中删除fd
+    // Remove fd from epoll fd via epoll_ctl
     retval = epoll_ctl(event_loop->epoll_fd, EPOLL_CTL_DEL, fd, &ev);
 #endif
-    // 设置event_loop为NULL，因为所有的操作都要通过epoll fd进行，这里把event_loop设置为NULL，就相当于没有了epoll fd
+    // Set event_loop to NULL, because all operations must be done via epoll fd. Setting event_loop to NULL here is equivalent to no epoll fd.
     event_loop = NULL;
     return retval;
   }
@@ -250,18 +250,18 @@ EventIO::stop()
 
 ### modify & refresh
 
-start和stop分别对应添加、删除，然后还定义了修改和刷新两个方法，但是对于epoll ET模式，这两个方法都是空方法：
+Start and stop respectively add and delete, and then define two methods of modification and refresh, but for epoll ET mode, both methods are empty methods:
 
 - modify
-   - 修改，对epoll LT，kqueue LT，port有相关代码定义，这里就不做分析了
+   - Modify, there are related code definitions for epoll LT, kqueue LT, port, so I will not analyze it here.
 - refresh
-   - 刷新，对kqueue LT，port有相关代码定义，这里就不做分析了
+   - Refresh, there are related code definitions for kqueue LT, port, so I will not analyze it here.
 
 ### close
 
-最后还有一个close方法，用于关闭fd，首先调用stop方法停止polling，然后根据type的类型，调用该类型的close方法完成fd的关闭。
+Finally, there is a close method for closing fd. First, call the stop method to stop polling. Then, according to the type of type, call the close method of this type to complete the closing of fd.
 
-但是close方法只负责关闭DNS，NetAccept，VC三种类型，对于UDP，则不可以调用close方法 // 这是为什么？？？
+However, the close method is only responsible for closing the DNS, NetAccept, and VC types. For UDP, you cannot call the close method. // Why? ? ?
 
 ```
 TS_INLINE int
@@ -285,13 +285,13 @@ EventIO::close()
 }
 ```
 
-close 方法好像只有dns系统调用，其它系统没有看到有任何调用此方法的操作：
+The close method seems to have only the dns system call, and other systems don't see any calls to this method:
 
-- 在close_UnixNetVConnection中则是先调用stop方法，然后再自己调用了vc->con.close()
-  - 其实是可以把调用stop方法修改为调用close方法的
-- 在NetAccept的处理中，因为只有在遇到错误时才需要把listen fd从epoll fd中删除，因此这块很少用到
-  - 在acceptFastEvent的Lerror标签处直接调用了server.close()，没有把listen fd从epoll fd中删除，貌似是一个小bug???
-  - 在cancel中也是直接调用了server.close()，没有把listen fd从epoll fd中删除
+- In close_UnixNetVConnection, the stop method is called first, and then vc->con.close() is called by itself.
+  - In fact, you can modify the call to the stop method to call the close method.
+- In the processing of NetAccept, because the listen fd needs to be deleted from the epoll fd only when an error is encountered, this piece is rarely used.
+  - Server.close() is called directly at the Lerror tag of acceptFastEvent. The listen fd is not deleted from epoll fd. It looks like a small bug???
+  - In the cancel, server.close() is also called directly, and the listen fd is not deleted from the epoll fd.
 
 ## 参考资料
 

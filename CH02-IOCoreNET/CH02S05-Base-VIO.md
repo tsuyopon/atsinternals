@@ -1,10 +1,10 @@
-# 基础组件：VIO
+# Basic component: VIO
 
-VIO用于描述一个正在进行的IO操作。
+VIO is used to describe an ongoing IO operation.
 
-它是由VConnections里的do_io_read和do_io_write方法返回。通过VIO，状态机可监控操作的进展，在数据到达时可以激活操作。
+It is returned by the do_io_read and do_io_write methods in VConnections. With VIO, the state machine monitors the progress of the operation and activates the operation when the data arrives.
 
-## 定义
+## definition
 
 ```
 class VIO 
@@ -53,81 +53,81 @@ public:
 
 ```
 
-## 方法
+## Method
 
 get_continuation()
 
-  - 获得与此VIO关联的Continuation
-  - 返回成员：_cont
+  - Get the Continuation associated with this VIO
+  - Return member: _cont
 
 set_continuation(Continuation *cont)
 
-  - 设置与此VIO关联的Continuation（通常为状态机SM），同时继承Cont的mutex。
-  - 通过调用：vc_server->set_continuation(this, cont) 通知到与VIO关联的VConnection。
-     - 这个VConnection::set_continuation()方法，随着NT的支持在Yahoo开源时被取消了，也就被同时废弃了。
-  - 设置之后，当此VIO上发生事件时，将会回调新Cont的handler，并传递Event。
-  - 如果cont==NULL，那么会同时清除VIO的mutex，也会传递给vc_server
+  - Set the Continuation (usually state machine SM) associated with this VIO, while inheriting Cont's mutex.
+  - Notify the VConnection associated with the VIO by calling: vc_server->set_continuation(this, cont).
+     - This VConnection::set_continuation() method, with the support of NT being canceled when Yahoo was open sourced, was also discarded.
+  - After setting, when an event occurs on this VIO, it will call back the handler of the new Cont and pass the Event.
+  - If cont==NULL, then the VIO mutex will be cleared at the same time, and will be passed to vc_server.
 
 set_writer(MIOBuffer *writer)
 
-  - 调用：buffer.writer_for(writer);
+  - Call: buffer.writer_for(writer);
 
 set_reader(IOBufferReader *reader)
 
-  - 调用：buffer.reader_for(reader);
+  - Call: buffer.reader_for(reader);
 
 get_writer()
 
-  - 返回：buffer.writer();
+  - Returns: buffer.writer();
 
 get_reader()
 
-  - 返回：buffer.reader();
+  - Returns: buffer.reader();
 
 done()
 
-  - 将VIO设置为完成，此VIO操作将会进入disable状态
-  - 设置nbytes ＝ ndone + buffer.reader()->read_avail()
-  - 如果buffer.reader()为空，则设置nbytes ＝ ndone
-  - 将不会触发EVENT_READ_COMPLETE或者EVENT_WRITE_COMPLETE事件**
+  - Set VIO to complete, this VIO operation will enter the disable state
+  - Set nbytes = ndone + buffer.reader()->read_avail()
+  - If buffer.reader() is empty, set nbytes = ndone
+  - EVENT_READ_COMPLETE or EVENT_WRITE_COMPLETE event will not be triggered**
 
 ntodo()
 
-  - 查看此VIO还有多少工作没有完成
-  - 返回 nbytes - ndone
+  - See how much work is still not completed in this VIO
+  - Return nbytes - ndone
 
 reenable() & reenable_re()
 
-  - 调用：vc_server->reenable(this) 或 vc_server->reenable_re(this)
-  - 状态机SM通过它来激活一个I/O操作。
-  - 告知VConnection有更多的数据等待被处理，但是首先要尝试继续之前的操作
-  - 当无法进行后续操作时，I/O操作将休眠，并等待被再次唤醒
-     - 对于读取操作，这意味着buffer满了。
-     - 对于写入操作，这意味着buffer空了。
-  - 当被唤醒之后，后续操作仍然无法进行时，这次唤醒将被忽略，不会有新的Event生成
-     - 这表示下次被唤醒时，传入的Event仍然是上一次设置的Event
-  - 应当避免非必要的唤醒，这会浪费CPU资源，并且降低系统的吞吐效率
-  - 对于reenable和reenable_re的区别，需要参考VConnection的继承类中的定义。
+  - Call: vc_server->reenable(this) or vc_server->reenable_re(this)
+  - The state machine SM uses it to activate an I/O operation.
+  - Tell VConnection that there is more data waiting to be processed, but first try to continue the previous operation
+  - When subsequent operations are not possible, the I/O operation will sleep and wait for it to wake up again
+     - For read operations, this means that the buffer is full.
+     - For write operations, this means that the buffer is empty.
+  - When the wakeup is still not possible after the wakeup, the wakeup will be ignored and no new Event will be generated.
+     - This means that the next time you wake up, the incoming Event is still the last set Event.
+  - Avoid unnecessary wakeups, which waste CPU resources and reduce system throughput
+  - For the difference between reenable and reenable_re, you need to refer to the definition in the inherited class of VConnection.
 
-## 成员变量
+## Member variables
 
 _cont
 
-  - 该指针用来保存调用这个VConnection，并且传递了Event进来的Continuation。
-  - 通常此Cont为状态机SM
+  - This pointer is used to hold the call to this VConnection and pass the Continuation of the Event.
+  - Usually this Cont is a state machine SM
 
 nbytes
 
-  - 表示需要处理的总字节数
+  - Indicates the total number of bytes that need to be processed
 
 ndone
 
-  - 表示已经处理完成的字节数
-  - 操作该值时必须取得锁
+  - Indicates the number of bytes that have been processed
+  - A lock must be taken when manipulating this value
 
 op
 
-  - 表示这个VIO的操作类型
+  - Indicates the type of operation of this VIO
 
 ```
   enum {
@@ -148,30 +148,30 @@ op
 
 buffer
 
-  - 如果op为写操作，包含一个指向IOBufferReader的指针
-  - 如果op为读操作，包含一个指向MIOBuffer的指针
+  - If op is a write operation, it contains a pointer to the IOBufferReader
+  - If op is a read operation, include a pointer to MIOBuffer
 
 vc_server
 
-  - 这是指回VIO对应VConnection的一个反向指针，用于reenable内部。
+  - This refers to a reverse pointer back to VIO for VConnection, which is used inside the reenable.
 
 mutex
 
-  - 对于状态机的mutex的引用
-  - 当VIO处于disable状态时，可能会指向VConnection的mutex。（例如：do_io_read(NULL, 0, NULL)，传入的cont==NULL）
-  - 即使状态机已经关闭VConnection并且进行了回收，Processor仍然可以安全的锁定该操作
+  - Reference to the mutex of the state machine
+  - When VIO is in the disable state, it may point to the mutex of VConnection. (Example: do_io_read(NULL, 0, NULL), incoming cont==NULL)
+  - Even if the state machine has closed VConnection and recycled, Processor can safely lock the operation
 
-## 理解 VIO
+## Understanding VIO
 
-状态机SM需要发起IO操作时，通过创建VIO来告知IOCore，IOCore在执行了物理IO操作后再通过VIO回调（通知）状态机SM。
+When the state machine SM needs to initiate an IO operation, it informs IOCore by creating a VIO, and the IOCore calls (notifies) the state machine SM through the VIO after performing the physical IO operation.
 
-所以VIO中包含了三个元素：BufferAccessor，VConnection，Cont（SM）
+So VIO contains three elements: BufferAccessor, VConnection, Cont(SM)
 
-数据流在BufferAccessor与VConnection之间流动，消息流在IOCore与Cont（SM）之间传递。
+The data flow flows between the BufferAccessor and the VConnection, and the message flow is passed between IOCore and Cont(SM).
 
-需要注意的是VIO里的BufferAccessor是指向MIOBuffer的操作者，MIOBuffer是由Cont（SM）创建的。
+It should be noted that the BufferAccessor in VIO is the operator pointing to MIOBuffer, and the MIOBuffer is created by Cont(SM).
 
-另外IOCore回调Cont（SM）时，是通过VIO内保存的\_cont指针进行的，不是通过vc\_server里的Cont。
+In addition, the IOCore callback Cont (SM) is carried out by the _cont pointer stored in the VIO, not through the Cont in the vc_server.
 
 ```
 +-------+                 +--------------------+    +-----------------------------------------+
@@ -192,24 +192,24 @@ mutex
 |       |                 |                    |    |                                         |
 +-------+                 +--------------------+    +-----------------------------------------+
 
-对于TCP，这里的IOCore指的就是NetHandler和UnixNetVConnection
+For TCP, IOCore here refers to NetHandler and UnixNetVConnection.
 ```
 
-例如，当状态机（SM）想要实现接收1M字节数据，并且转发给客户端的时候，我们可以通过以下方式实现：
+For example, when the state machine (SM) wants to receive 1 Mbyte of data and forward it to the client, we can do so in the following way:
 
-- 创建一个MIOBuffer，用于存放临时接收的数据
-- 通过do_io_read在SourceVC上创建一个读数据的VIO，设置读取长度为1M字节，并传入MIOBuffer用于接收临时数据
-- IOCore在SourceVC上接收到数据时会将数据生产到VIO中（暂存在MIOBuffer内）
-   - 然后呼叫SM->handler(EVENT_READ_READY, SourceVIO)
-   - 在handler中可以对SourceVIO进行消费（读取MIOBuffer内暂存的数据），获取本次读取到的一部分数据
-- VIO内有一个计数器，当总生产（读取）数据量达到1M字节
-   - 那么会由IOCore呼叫SM->handler(EVENT_READ_COMPLETE, SourceVIO)
-   - 在handler中需要首先对SourceVIO进行消费（读出），然后关闭SourceVIO。
-- 到此就完成了接收1M字节数据的过程。
+- Create a MIOBuffer to hold temporarily received data
+- Create a read VIO on SourceVC via do_io_read, set the read length to 1M bytes, and pass in the MIOBuffer to receive temporary data.
+- IOCore will generate data into VIO when it receives data on SourceVC (temporarily stored in MIOBuffer)
+   - Then call SM->handler(EVENT_READ_READY, SourceVIO)
+   - In the handler, you can consume SourceVIO (read the data temporarily stored in MIOBuffer) and get some data read this time.
+- There is a counter in VIO, when the total production (reading) data reaches 1Mbyte
+   - Then IOCore calls SM->handler(EVENT_READ_COMPLETE, SourceVIO)
+   - In the handler, you need to first consume (read) SourceVIO, then turn off SourceVIO.
+- This completes the process of receiving 1 Mbyte of data.
 
-可以看到，ATS通过VIO向IOCore描述一个包含若干次IO操作的任务，用于VIO操作的MIOBuffer可以很小，仅需要保存一次IO操作所需要的数据，然后由SM对VIO和MIOBuffer进行处理。
+It can be seen that ATS describes a task containing several IO operations to IOCore through VIO. The MIOBuffer for VIO operation can be small, only need to save the data required for IO operation, and then SM treats VIO and MIOBuffer.
 
-或者，可以把VIO看作是一个PIPE，一端是底层IO设备，一端是MIOBuffer，一个VIO创建之前要选择好它的方向，创建后不可修改，如：读VIO，就是从底层IO设备（vc_server）读数据到MIOBuffer；写VIO，就是从MIOBuffer写数据到底层IO设备（vc_server）。
+Alternatively, you can think of VIO as a PIPE, one end is the underlying IO device, and one end is MIOBuffer. A VIO should be selected before it is created. It cannot be modified after creation. For example, reading VIO is from the underlying IO device (vc_server). Read data to MIOBuffer; write VIO, which is to write data from MIOBuffer to the underlying IO device (vc_server).
 
 ```
 +---------------------------------------------------------------+
@@ -235,15 +235,15 @@ mutex
 |  else if( wbeEvent )                                          |
 |                 _cont->handler(wbeEvent, thisVIO)             |
 +---------------------------------------------------------------+
-在某些VC的实现中会在写空缓冲区时，再次触发wbeEvent事件，通常为EVENT_WRITE_READY
+In some VC implementations, the wbeEvent event is fired again when the empty buffer is written, usually EVENT_WRITE_READY
 ```
 
-VIO操作包含多种操作类型，可以通过'op'成员变量来确定。可选的值如下：
+VIO operations contain multiple types of operations that can be determined by the 'op' member variable. The optional values are as follows:
 
-  - READ 表示读操作
-  - WRITE 表示写操作
-  - CLOSE 表示请求关闭VConnection
-  - ABORT
+  - READ indicates read operation
+  - WRITE indicates write operation
+  - CLOSE indicates that the request to close VConnection
+  - ABORTION
   - SHUTDOWN_READ
   - SHUTDOWN_WRITE
   - SHUTDOWN_READWRITE
@@ -252,7 +252,7 @@ VIO操作包含多种操作类型，可以通过'op'成员变量来确定。可�
   - PWRITE
   - STAT
 
-## 参考资料
+## Reference material
 - [I_VIO.h]
 (http://github.com/apache/trafficserver/tree/master/iocore/eventsystem/I_VIO.h)
 - [I_VConnection.h](http://github.com/apache/trafficserver/tree/master/iocore/eventsystem/I_VConnection.h)

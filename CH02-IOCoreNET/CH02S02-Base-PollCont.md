@@ -1,6 +1,6 @@
-# 基础组件：PollCont
+# Basic component: PollCont
 
-虽然 Polling Sub-System 的抽象没有那么清晰，但是其仍然包含基本的三要素：
+Although the abstraction of Polling Sub-System is not so clear, it still contains the basic three elements:
 
 |  EventSystem   |    epoll   |  Polling SubSystem  |
 |:--------------:|:----------:|:-------------------:|
@@ -8,58 +8,58 @@
 |     EThread    | epoll_wait |      PollCont       |
 | EventProcessor |  epoll_ctl |       EventIO       |
 
-PollCont 作为 Polling Sub-System 中的状态机，通过周期性调用 epoll_wait() 实现了对 socket fd 的事件获取：
+PollCont, as a state machine in the Polling Sub-System, implements event fetching of socket fd by periodically calling epoll_wait():
 
 - PollDescriptor
-  - 可以理解为是一个包含了 socket fd 的队列
-  - 通过 epoll_wait 可以从这个队列里获得成员
+  - Can be understood as a queue containing socket fd
+  - Members can be obtained from this queue via epoll_wait
 - EventIO(1)
-  - 可以看作对 socket fd 上读／写请求的封装
+  - Can be seen as a wrapper around read/write requests on socket fd
 - PollCont
-  - 从 PollDescriptor 这个“队列”里获取成员（数据）
-  - 回调关联到 epoll fd 的状态机（NetHandler）并传递获取的成员（数据）
-  - 可能是为了便于代码的实现，NetHandler 被关联到了 PollCont
+  - Get members (data) from the "queue" of PollDescriptor
+  - The callback is associated with the epoll fd state machine (NetHandler) and passes the obtained member (data)
+  - Probably for the convenience of code implementation, NetHandler is associated with PollCont
 - EventIO(2)
-  - 可以看作 PollProcessor
-  - 负责管理 PollDescriptor “队列” 中的成员
-  - 通过几个方法实现了“队列”的增、删、改操作
+  - Can be seen as a PollProcessor
+  - Responsible for managing members in the PollDescriptor Queue
+  - Through several methods, the addition, deletion and modification of the "queue" are realized.
 
-可以看到 EventIO 同时承担了 Processor 的功能，这是因为 EventIO 在作为 Processor 时总是操作当前线程的 PollDescriptor，这不同于 EventProcessor 是作用于整个线程池的。因此，这里将 EventIO 的 Processor 功能：
+You can see that EventIO also assumes the functionality of the Processor. This is because EventIO always operates the current thread's PollDescriptor when it is a Processor, which is different from EventProcessor in the entire thread pool. Therefore, here is the Processor function of EventIO:
 
   - start() / stop()
   - modify() / refresh()
   - close()
 
-合并到 EventIO 内，这有点像 Event 类自身也提供了 schedule_\*() 的方法一样。
+Merge into EventIO, which is a bit like the Event class itself provides the same method for schedule_*().
 
-由于 epoll / kqueue 是 O(1) 复杂度的，非常的高效，所以：
+Since epoll / kqueue is O(1) complexity, it is very efficient, so:
 
-- 我们没有必要在一个线程里设置多个 epoll fd
-- 每个线程只需要配置一个 PollDescriptor 对象即可
+- We don't have to set up multiple epoll fd in one thread.
+- Only one PollDescriptor object needs to be configured per thread.
 
-PollCont 通过调用 epoll_wait 得到了结果集：
+PollCont gets the result set by calling epoll_wait:
 
-- 通常应该遍历该结果集
-- 对每一个结果（EventIO）回调它的状态机
-- 状态机的功能就是把 EventIO 中包含的 NetVC 放入到 NetHandler 的队列里
-- 等到 NetHandler 被 EventSystem 驱动时，再遍历它自己的队列
+- Usually should traverse the result set
+- Call back its state machine for each result (EventIO)
+- The function of the state machine is to put the NetVC contained in EventIO into the queue of NetHandler.
+- Wait until the NetHandler is driven by EventSystem, then traverse its own queue
 
-可以看到，逐个把 EventIO 放入 NetHandler 的队列的过程其实可以批量完成：
+As you can see, the process of putting EventIO into the NetHandler queue one by one can be done in batches:
 
-- ATS 的设计是让 NetHandler 直接访问结果集
-- 这就免去了从 结果集 到 NetHandler 队列的数据复制过程
+- ATS is designed to let NetHandler access the result set directly
+- This eliminates the data replication process from the result set to the NetHandler queue.
 
-所以，每一个处理网络任务的线程里只需要一个 PollDescriptor 和与之对应的 PollCont 和 NetHandler：
+Therefore, each thread that processes the network task only needs one PollDescriptor and its corresponding PollCont and NetHandler:
 
-- ATS 把 PollCont 的结果集放在了 PollDescriptor 里
-- 由 NetHandler 直接访问 PollDescriptor 里的结果集
-- 从而省去了通过回调传递结果集的过程
+- ATS puts the result set of PollCont in PollDescriptor
+- Direct access to the result set in PollDescriptor by NetHandler
+- Thereby eliminating the process of passing the result set through the callback
 
-虽然，从代码上看不到 PollCont 对 NetHandler 的回调，但是 NetHandler 的确是 PollCont 的上层状态机，只是 Polling Sub-System 在系统中的定义相对模糊一点，在 UDP 的实现部分，Polling Sub-System 则定义的相对清晰一些。
+Although PollCont does not see the callback of NetHandler from the code, NetHandler is indeed the upper state machine of PollCont, but the definition of Polling Sub-System in the system is relatively vague. In the implementation part of UDP, Polling Sub-System defines Relatively clear.
 
-为了便于分析，以下只列出了epoll ET模式相关的代码。
+For ease of analysis, only the code related to the epoll ET mode is listed below.
 
-## 定义
+## definition
 
 ```
 source: iocore/net/P_UnixNet.h
@@ -101,45 +101,45 @@ struct PollCont : public Continuation {
 };
 ```
 
-## 使用
+## use
 
-ATS的设计把 polling 操作当作事件核心系统的一部分，把对polling操作返回的fd集合的处理当做网络核心系统的一部分。
+The ATS design treats the polling operation as part of the event core system and treats the processing of the fd collection returned by the polling operation as part of the network core system.
 
-- PollCont的mutex指向ethread->mutex
-- NetHandler的mutex则是new_ProxyMutex()
+- PollCont's mutex points to ethread->mutex
+- NetHandler's mutex is new_ProxyMutex()
 
-因此当 NetHandler 被 EventSystem 驱动的时候，可以安全的访问 PollCont 和 PollDescriptor。
+So when NetHandler is driven by EventSystem, you can safely access PollCont and PollDescriptor.
 
-在传统的I/O复用系统的实现中，polling 操作完成后，立即就会对 fd 集合进行遍历和处理。
+In the implementation of the traditional I/O multiplexing system, the fd collection is traversed and processed immediately after the polling operation is completed.
 
-- 在ATS中使用 PollCont 实现 polling 操作
-- 然后使用 NetHandler 完成了对 fd结果集 的遍历和处理
+- Polling operation using PollCont in ATS
+- Then use NetHandler to complete the traversal and processing of the fd result set.
 
-这两个状态机在EThread::execute()的每一轮循环中都先后被回调，这就保证每一次的 polling 结果都能被NetHandler处理：
+These two state machines are called back in each round of EThread::execute(), which ensures that every polling result can be handled by NetHandler:
 
-- 目前只有 UDP 部分使用了这个逻辑，把 polling 操作（PollCont）和对 fd结果集 的处理（UDPNetHandler）分成了两个部分。
-- 在 TCP 部分使用的 NetHandler 则在内部直接调用了 epoll_wait 实现了 polling 操作
-  - 代码逻辑仍然跟 PollCont 是一样的，感觉是把 PollCont 内嵌到了 NetHandler 里
-  - 没有使用 PollCont::pollEvent 来完成 polling 操作
-  - 但是仍然通过 PollCont 的成员 PollDescriptor 存取 epoll fd 及 fd结果集
+- Currently only the UDP part uses this logic, splitting the polling operation (PollCont) and the processing of the fd result set (UDPNetHandler) into two parts.
+- The NetHandler used in the TCP part directly calls epoll_wait internally to implement the polling operation.
+  - The code logic is still the same as PollCont, and it feels like to embed PollCont in NetHandler.
+  - Did not use PollCont::pollEvent to complete the polling operation
+  - But still access the epoll fd and fd result sets through the member PollDescriptor of PollCont
 
-下面对于PollCont的理解和认识来自于UDP的实现部分（这部分官方计划砍掉，但是我们先简单看一下，其实这个设计理念非常赞）：
+The following understanding and understanding of PollCont comes from the implementation part of UDP (this part of the official plan is cut, but let's take a brief look, in fact, this design concept is very good):
 
-- 在UDP初始化时
-  - PollCont和UDPNetHandler先后被丢入EventSystem的隐性队列，优先级都是：-9
-  - 因此每一轮循环都是UDPNetHandler::mainNetEvent先执行，然后才是PollCont::pollEvent
-  - 这样的结果就是pollEvent返回的fd集合需要到下一次循环才会被处理
-  - 但是每轮循环的时间非常的短，所以基本没有什么问题
-- UDPNetHandler::mainNetEvent()只负责遍历PollDescriptor->ePoll_Triggered_Events[]数组
-  - 判断vc类型，判断事件类型
-  - 判断对应的vio是否被激活
-  - 回调vio关联的状态机
-- PollCont::pollEvent()只负责调用epoll_wait
-  - 把从epoll_wait得到的fd结果集放入PollDescriptor->ePoll_Triggered_Events[]数组里
-  - 更新PollDescriptor->result为epoll_wait的返回值
+- During UDP initialization
+  - PollCont and UDPNetHandler are thrown into the implicit queue of EventSystem, the priority is: -9
+  - So every round of loops is UDPNetHandler::mainNetEvent is executed first, then PollCont::pollEvent
+  - The result is that the fd collection returned by pollEvent will not be processed until the next iteration.
+  - But the time of each round is very short, so there is basically no problem.
+- UDPNetHandler::mainNetEvent() is only responsible for traversing the array of PollDescriptor->ePoll_Triggered_Events[]
+  - Determine the vc type and determine the type of event
+  - Determine if the corresponding vio is activated
+  - Callback vio associated state machine
+- PollCont::pollEvent() is only responsible for calling epoll_wait
+  - Put the fd result set from epoll_wait into the PollDescriptor->ePoll_Triggered_Events[] array
+  - Update PollDescriptor->result to the return value of epoll_wait
 
-（可以在看UDP部分的时候，再回来对照着看一下）
+(You can look back when you look at the UDP part)
 
-## 参考资料
+## Reference material
 - [P_UnixNet.h]
 (http://github.com/apache/trafficserver/tree/master/iocore/net/P_UnixNet.h)
