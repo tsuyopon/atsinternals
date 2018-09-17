@@ -199,8 +199,8 @@ Other information:
 ## Reference
 
 - [NPN and ALPN](https://www.imperialviolet.org/2013/03/20/alpn.html)
-- [NPN 与 ALPN](https://zlb.me/2013/07/19/npn-and-alpn/)
-- [SPDY简介](https://zlb.me/2013/01/07/spdy-intro/)
+- [NPN or ALPN](https://zlb.me/2013/07/19/npn-and-alpn/)
+- [Introduction to SPDY](https://zlb.me/2013/01/07/spdy-intro/)
 - NPN
   - [Draft NPN](http://tools.ietf.org/html/draft-agl-tls-nextprotoneg-04)
   - [GoogleCode technotes](https://github.com/agl/technotes.git)

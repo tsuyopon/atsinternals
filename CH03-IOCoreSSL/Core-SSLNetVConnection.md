@@ -1,37 +1,37 @@
-# 核心组件：SSLNetVConnection
+# core component: SSLNetVConnection
 
-SSLNetVConnection 继承自 UnixNetVConnection，在其基础上构建了对SSL会话的支持。
+SSLNetVConnection inherits from UnixNetVConnection and builds support for SSL sessions.
 
-与介绍UnixNetVConnection时一样，也来一个IOCoreSSL子系统的对比，与EventSystem是一样的，也有Thread，Processor和Event，只是名字不一样了：
+As with UnixNetVConnection, there is also a comparison of the IOCoreSSL subsystem, which is the same as EventSystem. There are also Thread, Processor and Event, but the names are different:
 
 |  EventSystem   |         IOCoreNet         |         IOCoreSSL         |
-|:--------------:|:-------------------------:|:-------------------------:|
+|: --------------: |: -------------------------: |: --- ----------------------:: |
 |      Event     |     UnixNetVConnection    |     SSLNetVConnection     |
-|     EThread    | NetHandler，InactivityCop | NetHandler, InactivityCop |
-| EventProcessor |        NetProcessor       |      sslNetProcessor      |
+| EThread | NetHandler, InactivityCop | NetHandler, InactivityCop |
+| EventProcessor | NetProcessor | sslNetProcessor |
 
-- 像 Event和UnixNetVConnection 一样，SSLNetVConnection 也提供了面向上层状态机的方法
-  - do_io_* 系列
+- Like Event and UnixNetVConnection, SSLNetVConnection also provides a way to the upper state machine
+  - do_io_* series
   - (set|cancel)_*_timeout 系列
-  - (add|remove)_*_queue 系列
-  - 还有一部分面向上层状态机的方法在sslNetProcessor中定义
-- SSLNetVConnection 也提供了面向底层状态机的方法
-  - 通常由NetHandler来调用
-  - 可以把这些方法视作NetHandler状态机的专用回调函数
-  - 我个人觉得，应该把所有跟socket打交道的函数都放在NetHandler里面
-- SSLNetVConnection 也是状态机
-  - 因此它也有自己的handler（回调函数）
-    - SSLNetAccept调用acceptEvent
-    - InactivityCop调用mainEvent
-    - 构造函数会初始化为startEvent，用于调用connectUp()，这是面向sslNetProcessor的
-  - 大致有以下三条调用路径：
+  - (add|remove)_*_queue series
+  - There is also a part of the method for the upper state machine defined in sslNetProcessor
+- SSLNetVConnection also provides methods for the underlying state machine
+  - Usually called by NetHandler
+  - These methods can be thought of as dedicated callback functions for the NetHandler state machine
+  - I personally think that all the functions that deal with the socket should be placed in the NetHandler.
+- SSLNetVConnection is also a state machine
+  - So it also has its own handler (callback function)
+    - SSLNetAccept calls acceptEvent
+    - InactivityCop calls mainEvent
+    - The constructor is initialized to startEvent, which is used to call connectUp(), which is for sslNetProcessor
+  - There are roughly three call paths:
     - EThread  －－－  SSLNetAccept  －－－ SSLNetVConnection
-    - EThread  －－－  NetHandler  －－－  SSLNetVConnection
+    - EThread --- NetHandler --- SSLNetVConnection
     - EThread  －－－  InactivityCop  －－－  SSLNetVConnection
 
-由于它既是Event，又是SM，还比UnixNetVConnection增加了SSL的处理，所以从形态上来看，SSLNetVConnection 要比 Event和UnixNetVConnection 复杂的多。
+Since it is both an Event and an SM, it also adds SSL processing to UnixNetVConnection, so from a morphological point of view, SSLNetVConnection is much more complicated than Event and UnixNetVConnection.
 
-SSLNetVConnection 对 UnixNetVConnection 的部分方法进行了重载：
+SSLNetVConnection overloads some methods of UnixNetVConnection:
 
   - net_read_io
   - load_buffer_and_write
@@ -44,7 +44,7 @@ SSLNetVConnection 对 UnixNetVConnection 的部分方法进行了重载：
   - getSSLClientConnection
   - setSSLClientConnection
 
-同时增加了一些方法：
+At the same time, some methods have been added:
 
   - enableRead
   - getSSLSessionCacheHit
@@ -68,23 +68,23 @@ SSLNetVConnection 对 UnixNetVConnection 的部分方法进行了重载：
   - isEosRcvd
 
 
-## 定义
+## definition
 
-在下面的成员方法里，凡是相对于UnixNetVConnection新增的、重载的，都会标记说明。
+In the following member methods, any new and overloaded UnixNetVConnection will be marked with a description.
 
-```
-// 继承自UnixNetVConnection
+`` `
+// Inherited from UnixNetVConnection
 class SSLNetVConnection : public UnixNetVConnection
 {
-  // 实现 super ，这个很有趣，也很巧妙
+  // implement super , this is very interesting and very clever
   typedef UnixNetVConnection super; ///< Parent type.
 public:
-  // 这是一个ssl握手的入口，根据握手是Client与ATS之间，还是ATS与OS之间，再调用后面的两个方法来完成。
+  // This is the entry point of an ssl handshake, depending on whether the handshake is between the Client and the ATS, or between the ATS and the OS, and then the next two methods are called.
   virtual int sslStartHandShake(int event, int &err);
   virtual void free(EThread *t);
   
-  // 新增方法
-  // 同时激活了read VIO和write VIO
+  // new method
+  // both read VIO and write VIO are activated
   virtual void
   enableRead()
   {
@@ -92,138 +92,138 @@ public:
     write.enabled = 1;
   };
   
-  // 重载方法
-  // 返回成员sslHandShakeComplete，表示是否完成了握手过程
+  // overload method
+  // Return the member sslHandShakeComplete, indicating whether the handshake process is completed
   virtual bool
   getSSLHandShakeComplete()
   {
     return sslHandShakeComplete;
   };
-  // 重载方法
-  // 设置成员sslHandShakeComplete
+  // overload method
+  // Set the member sslHandShakeComplete
   void
   setSSLHandShakeComplete(bool state)
   {
     sslHandShakeComplete = state;
   };
-  // 重载方法
-  // 返回成员sslClientConnection，表示这是否是来自Client的SSL连接。
+  // overload method
+  // Return the member sslClientConnection to indicate if this is an SSL connection from the Client.
   virtual bool
   getSSLClientConnection()
   {
     return sslClientConnection;
   };
-  // 重载方法
-  // 设置成员sslClientConnection
+  // overload method
+  // Set the member sslClientConnection
   virtual void
   setSSLClientConnection(bool state)
   {
     sslClientConnection = state;
   };
-  // 新增方法
-  // 设置成员sslSessionCacheHit
+  // new method
+  // Set the member sslSessionCacheHit
   virtual void
   setSSLSessionCacheHit(bool state)
   {
     sslSessionCacheHit = state;
   };
-  // 新增方法
-  // 返回成员sslSessionCacheHit，用来表示这是否是一个Session Reuse的SSL连接
+  // new method
+  // Returns the member sslSessionCacheHit to indicate if this is a Session Reuse SSL connection
   virtual bool
   getSSLSessionCacheHit()
   {
     return sslSessionCacheHit;
   };
   
-  // 新增方法，两个方法都是被sslStartHandShake调用
-  // 用于实现Client与ATS之间的握手
+  // new method, both methods are called by sslStartHandShake
+  // Used to implement the handshake between the Client and the ATS
   int sslServerHandShakeEvent(int &err);
-  // 用于实现ATS与OS之间的握手
+  // Used to implement the handshake between ATS and OS
   int sslClientHandShakeEvent(int &err);
 
-  // 重载方法
-  // 与NetHandler结合，实现对SSL数据的解密（net_read_io）和加密（load_buffer_and_write）
+  // overload method
+  // Combine with NetHandler to decrypt SSL data (net_read_io) and encrypt (load_buffer_and_write)
   virtual void net_read_io(NetHandler *nh, EThread *lthread);
   virtual int64_t load_buffer_and_write(int64_t towrite, int64_t &wattempted, int64_t &total_written, MIOBufferAccessor &buf,
                                         int &needs);
-  // 实现 NPN 方式的状态机协议流转
-  // 注册一个 NPN 状态机的入口
+  // Implement state machine protocol flow in NPN mode
+  // Register an entry for an NPN state machine
   void registerNextProtocolSet(const SSLNextProtocolSet *);
-  // 重载方法
+  // overload method
   virtual void do_io_close(int lerrno = -1);
 
-  ////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // Instances of NetVConnection should be allocated        //
   // only from the free list using NetVConnection::alloc(). //
   // The constructor is public just to avoid compile errors.//
-  ////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////
   SSLNetVConnection();
   virtual ~SSLNetVConnection() {}
 
-  // 指向用来保存 SSL 会话的对象
+  // Point to the object used to save the SSL session
   SSL *ssl;
-  // 记录ssl会话开始的时间
+  // Record the time when the ssl session starts
   ink_hrtime sslHandshakeBeginTime;
-  // 记录ssl最后发送数据的时间，由load_buffer_and_write在数据发送之后更新
+  // Record the time when ssl last sent data, updated by load_buffer_and_write after data is sent
   ink_hrtime sslLastWriteTime;
-  // 记录ssl总共发送的字节数，由load_buffer_and_write在数据发送之后更新
+  // Record the total number of bytes sent by ssl, updated by load_buffer_and_write after the data is sent
   int64_t sslTotalBytesSent;
 
-  // 实现 NPN/ALPN 方式的状态机协议流转
-  // 使用一个 NPN 状态机的入口来测试当前接收的数据，是否能够被该状态机处理
-  //     通过 SSL_CTX_set_next_protos_advertised_cb() 设置
+  // Implement state machine protocol flow in NPN/ALPN mode
+  // Use an entry to the NPN state machine to test the current received data, whether it can be processed by the state machine
+  // set by SSL_CTX_set_next_protos_advertised_cb()
   static int advertise_next_protocol(SSL *ssl, const unsigned char **out, unsigned *outlen, void *);
-  // 选择下一个 ALPN 状态机
-  //     通过 SSL_CTX_set_alpn_select_cb() 设置
+  // Select the next ALPN state machine
+  // set by SSL_CTX_set_alpn_select_cb()
   static int select_next_protocol(SSL *ssl, const unsigned char **out, unsigned char *outlen, const unsigned char *in,
                                   unsigned inlen, void *);
 
-  // 新增方法
-  // 获取npn状态机，当SSL握手完成后，需要设置接收到的明文数据由哪个状态机来处理
-  // 例如https，在完成SSL握手之后，就交给HttpSessionAccept来接管
+  // new method
+  // Get the npn state machine. After the SSL handshake is completed, you need to set which state machine to process the received plaintext data.
+  // For example, https, after completing the SSL handshake, hand it over to HttpSessionAccept to take over
   Continuation *
   endpoint() const
   {
     return npnEndpoint;
   }
-  // 新增方法
-  // 这个方法没有被调用，在net_read_io中直接判断了成员的值。
+  // new method
+  // This method is not called, and the value of the member is directly evaluated in net_read_io.
   bool
-  getSSLClientRenegotiationAbort() const
+  getSSLClientRenegotiationAbort () const
   {
     return sslClientRenegotiationAbort;
   };
-  // 新增方法
-  // 在握手完成后，如果收到了Client发起的Renegotiation（SSL会话重新协商请求）时，
-  // 判断 ssl_allow_client_renegotiation 的值来决定是否调用此方法来设置一个Abort状态，以关闭此SSL连接。
+  // new method
+  // After the handshake is completed, if the Renegotiation initiated by the client is received, the SSL session renegotiation request is received.
+  // Determine the value of ssl_allow_client_renegotiation to determine whether to call this method to set an Abort state to close this SSL connection.
   void
   setSSLClientRenegotiationAbort(bool state)
   {
     sslClientRenegotiationAbort = state;
   };
-  // 新增方法
-  // 返回成员transparentPassThrough
+  // new method
+  // return member transparentPassThrough
   bool
   getTransparentPassThrough() const
   {
     return transparentPassThrough;
   };
-  // 新增方法
-  // 当ATS的端口被设置为 tr-pass 类型时，transparentPassThrough为true
+  // new method
+  // transparentPassThrough is true when the port of ATS is set to tr-pass type
   void
-  setTransparentPassThrough(bool val)
+  setTransparentPassThrough (boolean option)
   {
     transparentPassThrough = val;
   };
-  // 新增方法
-  // 设置一个session_accept的指针，但是这个指针没有在SSL中使用
+  // new method
+  // Set a pointer to session_accept, but this pointer is not used in SSL
   void
   set_session_accept_pointer(SessionAccept *acceptPtr)
   {
     sessionAcceptPtr = acceptPtr;
   };
-  // 新增方法
-  // 返回成员sessionAcceptPtr
+  // new method
+  // return member sessionAcceptPtr
   SessionAccept *
   get_session_accept_pointer(void) const
   {
@@ -231,26 +231,26 @@ public:
   };
 
   // Copy up here so we overload but don't override
-  // 复用UnixNetVConnection::reenable(VIO *vio)
+  // 复 用 UnixNetVConnection :: reenable (VIO * saw)
   using super::reenable;
 
   // Reenable the VC after a pre-accept or SNI hook is called.
-  // 注意这里的reenable与上面的不同，因此SSLNetVConnection::reenable()是多态的
+  // Note that the reenable here is different from the above, so SSLNetVConnection::reenable() is polymorphic
   virtual void reenable(NetHandler *nh);
   
   // Set the SSL context.
   // @note This must be called after the SSL endpoint has been created.
-  // 设置SSL的上下文
+  // Set the context of SSL
   virtual bool sslContextSet(void *ctx);
 
   /// Set by asynchronous hooks to request a specific operation.
   TSSslVConnOp hookOpRequested;
 
-  // 直接从socket fd读取未解密的原始数据，放入handShakeBuffer这个MIOBuffer
+  // Read undecrypted raw data directly from socket fd, put it into handShakeBuffer MIOBuffer
   int64_t read_raw_data();
   
-  // 初始化handShakeBuffer这个MIOBuffer，以及对应的Reader: handShakeReader 和 handShakeHolder
-  //     handShakeBioStored 用来表示当前handShakeBuffer内可消费的数据长度
+  // Initialize the handShakeBuffer MIOBuffer, and the corresponding Reader: handShakeReader and handShakeHolder
+  // handShakeBioStored is used to indicate the length of data that can be consumed in the current handShakeBuffer
   void
   initialize_handshake_buffers()
   {
@@ -259,7 +259,7 @@ public:
     this->handShakeHolder = this->handShakeReader->clone();
     this->handShakeBioStored = 0;
   }
-  // 释放handShakeBuffer这个MIOBuffer，还有对应的Reader
+  // Release the handShakeBuffer MIOBuffer, and the corresponding Reader
   void
   free_handshake_buffers()
   {
@@ -279,62 +279,62 @@ public:
   }
   
   // Returns true if all the hooks reenabled
-  // 回调SSL的Hook，返回true表示所有hooks都执行完了，允许进入下一个流程
+  // Callback SSL Hook, return true means that all hooks are executed, allowing access to the next process
   bool callHooks(TSHttpHookID eventId);
 
   // Returns true if we have already called at
   // least some of the hooks
-  // 是否已经开始了对Hook的回调过程
+  // Has the callback process for Hook started?
   bool calledHooks(TSHttpHookID /* eventId */) { return (this->sslHandshakeHookState != HANDSHAKE_HOOKS_PRE); }
 
-  // 获取 iobuf
-  // iobuf 用来保存解密后的数据，对应的时VIO里的MIOBuffer
+  // get iobuf
+  // iobuf is used to save the decrypted data, corresponding to the MIOBuffer in VIO
   MIOBuffer *
   get_ssl_iobuf()
   {
     return iobuf;
   }
 
-  // 设置 iobuf
+  // Set up iobuf
   void
   set_ssl_iobuf(MIOBuffer *buf)
   {
     iobuf = buf;
   }
-  // 这个reader是对应iobuf的MIOBufferReader
+  // This reader is the MIOBufferReader for iobuf
   IOBufferReader *
   get_ssl_reader()
   {
     return reader;
   }
 
-  // 如果遇到了SSL关闭的情况，设置eosRcvd为true
-  // 此方法返回这个状态
+  // Set eosRcvd to true if SSL is encountered.
+  // This method returns this state
   bool
   isEosRcvd()
   {
     return eosRcvd;
   }
 
-  // 获取sslTrace状态
-  // 这个是一个debug调试SSL的开关
+  // Get the sslTrace state
+  // This is a debug debug SSL switch
   bool
   getSSLTrace() const
   {
     return sslTrace || super::origin_trace;
   };
-  // 设置sslTrace状态
+  // Set the sslTrace state
   void
   setSSLTrace(bool state)
   {
     sslTrace = state;
   };
 
-  // 根据特定条件激活sslTrace
-  // 例如需要对特定ip，特定域名进行SSL调试的时候
+  // Activate sslTrace based on specific conditions
+  // For example, when you need to debug SSL for a specific ip, specific domain name
   bool computeSSLTrace();
 
-  // 获得SSL会话的协议版本
+  // Get the protocol version of the SSL session
   const char *
   getSSLProtocol(void) const
   {
@@ -343,7 +343,7 @@ public:
     return SSL_get_version(ssl);
   };
 
-  // 获得SSL会话的密钥算法套件
+  // Get the key algorithm suite for the SSL session
   const char *
   getSSLCipherSuite(void) const
   {
@@ -352,32 +352,32 @@ public:
     return SSL_get_cipher_name(ssl);
   }
 
-  /**
+  / **
    * Populate the current object based on the socket information in in the
    * con parameter and the ssl object in the arg parameter
    * This is logic is invoked when the NetVC object is created in a new thread context
-   */
-  // 跟UnixNetVConnection里的一样，这个也是2015年10月新增的方法
+   * /
+  // Same as in UnixNetVConnection, this is also the new method in October 2015.
   virtual int populate(Connection &con, Continuation *c, void *arg);
 
 private:
   SSLNetVConnection(const SSLNetVConnection &);
   SSLNetVConnection &operator=(const SSLNetVConnection &);
 
-  // true = SSL握手完成设置
+  // true = SSL handshake completion setting
   bool sslHandShakeComplete;
-  // true = 这是一个Client与ATS之间的SSL连接
+  // true = This is an SSL connection between Client and ATS
   bool sslClientConnection;
-  // true = 重新协商时被设置禁止，SSL会话讲终止
+  // true = is set to be disabled during renegotiation, the SSL session is terminated
   bool sslClientRenegotiationAbort;
-  // true = 本次TCP连接的SSL会话，是复用了之前的SSL会话
+  // true = This SSL session for the TCP connection is a reuse of the previous SSL session.
   bool sslSessionCacheHit;
-  // 用于SSL握手过程中，存放临时数据的MIOBuffer
+  // MIOBuffer for temporary data storage during SSL handshake
   MIOBuffer *handShakeBuffer;
   // handShakeBuffer的reader
   IOBufferReader *handShakeHolder;
   IOBufferReader *handShakeReader;
-  // handShakeBuffer内数据的长度
+  // length of data in handShakeBuffer
   int handShakeBioStored;
 
   // true = tr-pass
@@ -385,84 +385,84 @@ private:
 
   /// The current hook.
   /// @note For @C SSL_HOOKS_INVOKE, this is the hook to invoke.
-  // 当前hook点
+  // current hook point
   class APIHook *curHook;
 
-  // 此处用于标记PreAccept Hook的执行状态
+  // This is used to mark the execution state of the PreAccept Hook
   enum {
     SSL_HOOKS_INIT,     ///< Initial state, no hooks called yet.
-                        ///< 初始状态，没有任何hook被调用过
+                        ///< initial state, no hooks have been called
     SSL_HOOKS_INVOKE,   ///< Waiting to invoke hook.
-                        ///< 等待对hook的回调，通常在当前hook点没有返回reenable的时候，就停在这个状态
+                        ///< Waiting for a callback to a hook, usually when the current hook point does not return a reenable, it stops at this state.
     SSL_HOOKS_ACTIVE,   ///< Hook invoked, waiting for it to complete.
-                        ///< 这个没有实现
+                        ///< This is not implemented
     SSL_HOOKS_CONTINUE, ///< All hooks have been called and completed
-                        ///< 这个也没有实现
+                        ///< This is also not implemented
     SSL_HOOKS_DONE      ///< All hooks have been called and completed
-                        ///< 表示PreAccept Hook执行完了
+                        ///< means that the PreAccept Hook is executed.
   } sslPreAcceptHookState;
 
-  // 此处用于标记SNI/CERT Hook的执行状态
+  // This is used to mark the execution status of the SNI/CERT Hook
   enum SSLHandshakeHookState {
-    HANDSHAKE_HOOKS_PRE,     ///< 初始状态，没有任何
-    HANDSHAKE_HOOKS_CERT,    ///< 中间状态，只在openssl回调cert callback func的时候，存在
-    HANDSHAKE_HOOKS_POST,    ///< 未实现
-    HANDSHAKE_HOOKS_INVOKE,  ///< 等待对hook的回调，通常在当前hook点没有返回reenable的时候，就停在这个状态
-    HANDSHAKE_HOOKS_DONE     ///< 表示SNI/CERT Hook执行完了
+    HANDSHAKE_HOOKS_PRE, ///< initial state, no any
+    HANDSHAKE_HOOKS_CERT, ///< intermediate state, only exists when openssl callback cert callback func
+    HANDSHAKE_HOOKS_POST, /// <not available
+    HANDSHAKE_HOOKS_INVOKE, ///< Waiting for a callback to a hook, usually when the current hook point does not return a reenable, it stops at this state.
+    HANDSHAKE_HOOKS_DONE ///< means that the SNI/CERT Hook is executed.
   } sslHandshakeHookState;
 
-  // npnSet 保存了所有被支持协议的 Name String 和 SessionAccept 入口
+  // npnSet holds the Name String and SessionAccept entries for all supported protocols
   const SSLNextProtocolSet *npnSet;
-  // 在 SSLaccept() 握手成功后，使用下面的方法进行 NPN/ALPN 协商判断：
+  // After the SSLaccept() handshake is successful, use the following method to make an NPN/ALPN negotiation decision:
   //     this->npnEndpoint = this->npnSet->findEndpoint(proto, len);
-  // npnEndpoint 会被设置为协商成功的那个协议的 SessionAccept 入口
-  //     如果协商失败则被设置为 NULL
+  // npnEndpoint will be set to the SessionAccept entry of the protocol that negotiated successfully
+  // is set to NULL if the negotiation fails
   Continuation *npnEndpoint;
-  // 这个SessionAccept好像没用到？
+  // This SessionAccept doesn't seem to be used?
   SessionAccept *sessionAcceptPtr;
-  // iobuf 和对应的 reader，实际上是蹦床中 iobuf 的重复，
-  // 由于抽象的不够好，导致需要在 SSLNetVConnection 中定义这个成员
-  // 而且在上层状态机，如：HttpSM，SpdySM，H2SM中都需要对NetVC进行判断，
-  //     如果是sslvc类型则需要从sslvc中获取iobuf
-  //     如果是unixnetvc类型则使用从蹦床传递进来的iobuf
+  // iobuf and the corresponding reader are actually duplicates of the iobuf in the trampoline.
+  // Because the abstraction is not good enough, you need to define this member in SSLNetVConnection
+  // And in the upper state machine, such as: HttpSM, SpdySM, H2SM need to judge NetVC,
+  // If it is sslvc type, you need to get iobf from sslvc
+  // If it is a unixnetvc type, use the iobuf passed in from the trampoline.
   MIOBuffer *iobuf;
   IOBufferReader *reader;
-  // 是否接收到了eos
+  // Did you receive eos?
   bool eosRcvd;
-  // 是否开启了sslTrace
+  // Is sslTrace turned on?
   bool sslTrace;
 };
 
 typedef int (SSLNetVConnection::*SSLNetVConnHandler)(int, void *);
 
 extern ClassAllocator<SSLNetVConnection> sslNetVCAllocator;
-```
+`` `
 
-## SSL/TLS 实现简介
+## SSL/TLS Implementation Introduction
 
-理论上来说，SSL/TLS 是构建在 TCP 协议之上，因此也可以使用类似 HttpSM 的设计方式，实现 SSL/TLS 的握手和数据加解密的过程。
+In theory, SSL/TLS is built on top of the TCP protocol, so you can use the HttpSM-like design approach to implement SSL/TLS handshake and data encryption and decryption.
 
-但是这样的实现，就导致了从 IOCoreNet 到 HttpSM 是一层关系，而从 IOCoreNet 到 SSL/TLS 再到 HttpSM，从而实现 https 的时候，是两层关系。
+However, such an implementation leads to a relationship between IOCoreNet and HttpSM, and from IOCoreNet to SSL/TLS to HttpSM, which implements https is a two-layer relationship.
 
-这样在实现 HttpSM 的时候，就要考虑前面还有一个同层次的上层状态机，而不能直接操作 VIO。
+In this way, when implementing HttpSM, it is necessary to consider that there is a higher-level state machine in the same level, and you cannot directly operate VIO.
 
-事实上在 IOCoreNet 到 SSL/TLS 再到 HttpSM 的实现方式中，SSL/TLS 更像是一个 TransformVC，在后面我们介绍 TransformVC 时，就会了解到，让 HttpSM 同时兼容 NetVC 和 TransformVC 是很困难的。
+In fact, in the implementation of IOCoreNet to SSL/TLS to HttpSM, SSL/TLS is more like a TransformVC. When we introduce TransformVC later, we will understand that it is very difficult to make HttpSM compatible with both NetVC and TransformVC.
 
-因此，在 ATS 对 SSL/TLS 的实现里，选择了把 SSL/TLS 作为 IOCore 的一部分，而不是把 SSL/TLS 放到上层状态机里。
+Therefore, in the ATS implementation of SSL/TLS, SSL/TLS was chosen as part of IOCore instead of putting SSL/TLS into the upper state machine.
 
-这样的好处，可以让 HttpSM 在处理 HTTPS 协议时使用 SSLNetVConnection，与处理 HTTP 协议时使用 UnixNetVConnection 是完全一样的。
+This has the advantage that HttpSM can use SSLNetVConnection when processing the HTTPS protocol, exactly the same as using UnixNetVConnection when processing the HTTP protocol.
 
-于是 SSLNetVConnection 就诞生了，但是 SSL/TLS 的处理实际上是一个子状态机，它有两个状态：握手状态和数据通信状态。在 UnixNetVConnection 上重载、扩展了一堆的方法来实现这个子状态机。
+The SSLNetVConnection was born, but the processing of SSL/TLS is actually a sub-state machine with two states: handshake state and data communication state. Overload and extend a bunch of methods on UnixNetVConnection to implement this substate machine.
 
-由于是子状态机，就要有一个切入点，这个切入点，就在：
+Since it is a substate machine, there must be a pointcut. This pointcut is:
 
   - vc->net_read_io
   - write_to_net(vc), write_to_net_io(vc)
     - vc->load_buffer_and_write
 
-还记得 NetHandler::mainNetEvent 部分是如何调用上面的两个方法的吗？
+Remember how the NetHandler::mainNetEvent section calls the two methods above?
 
-```
+`` `
   // UnixNetVConnection *
   while ((vc = read_ready_list.dequeue())) {
     if (vc->closed)
@@ -482,108 +482,108 @@ extern ClassAllocator<SSLNetVConnection> sslNetVCAllocator;
       write_ready_list.remove(vc);
     }
   }
-```
+`` `
 
-以下是 UnixNetVConnection的读写过程：
+The following is the UnixNetVConnection read and write process:
 
-  - 在读取 socket fd 到 MIOBuffer 的时候，调用的：
+  - When reading socket fd to MIOBuffer, call:
     - vc->net_read_io(this, trigger_event->ethread);
-    - 这是一个 netvc 的成员方法
-    - 事实上是直接调用了 read_from_net(nh, this, lthread);
-    - 这不是一个 netvc 的成员方法
-    - 在 read_from_net 中调用了 read/readv 方法实现了读取操作
-  - 但是在将 MIOBuffer 写入 socket fd 的时候，调用的：
+    - This is a member method of netvc
+    - In fact, it directly calls read_from_net(nh, this, lthread);
+    - This is not a member method of netvc
+    - The read/readv method was called in read_from_net to implement the read operation
+  - But when writing MIOBuffer to socket fd, call:
     - write_to_net(this, vc, trigger_event->ethread);
-    - 这不是一个 netvc 的成员方法
-    - 事实上是直接调用了 write_to_net_io(nh, vc, thread);
+    - This is not a member method of netvc
+    - In fact, write_to_net_io(nh, vc, thread) is called directly;
     - 在 write_to_net_io 中调用了vc->load_buffer_and_write(towrite, wattempted, total_written, buf, needs);
-    - 这是一个 netvc 的成员方法
-    - 在 vc->load_buffer_and_write 中调用了 write/writev 方法实现了读取操作
+    - This is a member method of netvc
+    - The write/writev method is called in vc->load_buffer_and_write to implement the read operation.
 
-那么 SSLNetVConnection 的读写过程呢：
+Then the read and write process of SSLNetVConnection:
 
-  - 在读取 socket fd 到 MIOBuffer 的时候，调用的：
+  - When reading socket fd to MIOBuffer, call:
     - vc->net_read_io(this, trigger_event->ethread);
-      - 这是一个 netvc 的成员方法，但是在sslvc中被重载了
-    - 在 sslvc->net_read_io 中调用了 ssl_read_from_net(this, lthread, r);
-      - 这不是一个 netvc 的成员方法
-    - 在 ssl_read_from_net 中调用了 SSLReadBuffer 方法
-    - 在 SSLReadBuffer 中调用了 OpenSSL API 的 SSL_read(ssl, buf, (int)nbytes); 实现了读取并解密的操作
-  - 在将 MIOBuffer 写入 socket fd 的时候，调用的：
+      - This is a member method of netvc, but it is overloaded in sslvc
+    - ssl_read_from_net(this, lthread, r) is called in sslvc->net_read_io;
+      - This is not a member method of netvc
+    - The SSLReadBuffer method is called in ssl_read_from_net
+    - SSL_read(ssl, buf, (int)nbytes), which calls the OpenSSL API in SSLReadBuffer; implements read and decrypt operations
+  - When writing MIOBuffer to socket fd, call:
     - write_to_net(this, vc, trigger_event->ethread);
-      - 这不是一个 netvc 的成员方法
-      - 事实上是直接调用了 write_to_net_io(nh, vc, thread);
+      - This is not a member method of netvc
+      - In fact, write_to_net_io(nh, vc, thread) is called directly;
     - 在 write_to_net_io 中调用了vc->load_buffer_and_write(towrite, wattempted, total_written, buf, needs);
-      - 这是一个 netvc 的成员方法，但是在sslvc中被重载了
-    - 在 sslvc->load_buffer_and_write 中调用了 SSLWriteBuffer 方法
-    - 在 SSLWriteBuffer 中调用了 OpenSSL API 的 SSL_write(ssl, buf, (int)nbytes); 实现了发送并加密的操作
+      - This is a member method of netvc, but it is overloaded in sslvc
+    - The SSLWriteBuffer method is called in sslvc->load_buffer_and_write
+    - SSL_write(ssl, buf, (int)nbytes), which calls the OpenSSL API in SSLWriteBuffer; implements the operation of sending and encrypting
 
-我们看到：
+We saw:
 
-  - 数据读取过程，基本都被 SSLNetVConnection 重载过了
-  - 而数据发送过程则只有后半部分被重载
+  - The data reading process has been basically reloaded by SSLNetVConnection
+  - the data transmission process is only overloaded in the second half
 
-而 SSL/TLS 的握手过程则在 net_read_io 和 write_to_net_io 中进行了处理：
+The SSL/TLS handshake process is handled in net_read_io and write_to_net_io:
 
-  - write_to_net_io 不是 netvc 的成员函数，无法被 sslvc 重载，但是在编写时已经对 SSLVC 做了一个判断
-  - 当 OpenSSL 遇到 WANT_WRITE 等错误状态时，就需要等待 socket fd 可写
+  - write_to_net_io is not a member function of netvc and cannot be overridden by sslvc, but it has already made a judgment on SSLVC at the time of writing.
+  - When OpenSSL encounters an error state such as WANT_WRITE, it needs to wait for socket fd to be writable
 
-由于 SSL/TLS 的握手过程和数据传输过程是完全不同的，所以：
+Since the handshake process of SSL/TLS and the data transfer process are completely different, so:
 
-  - 握手过程实际上需要一个状态机来处理
-  - 数据传输过程/加解密过程，则是通过类似 TransformVC 的方式来完成
-  - 为了集成上述两种实现，SSL/TLS 设计的真的非常复杂？巧妙？混乱？
-  - 反正就是各种难懂、别扭就对了，看不懂就多看两遍，仔细推敲吧
+  - The handshake process actually requires a state machine to handle
+  - The data transfer process / encryption and decryption process is done by a method similar to TransformVC
+  - In order to integrate the above two implementations, is the SSL/TLS design really complicated? clever? confusion?
+  - Anyway, it’s all sort of difficult to understand, awkward, right. If you don’t understand, just read it twice and carefully.
 
-## 方法
+## Method
 
 ### net_read_io(NetHandler *nh, EThread *lthread)
 
-net_read_io() 是 SSLNetVConnection 的成员方法，包含了 SSL握手 和 SSL传输 两个功能的代码。
+Net_read_io() is a member method of SSLNetVConnection and contains code for both SSL handshake and SSL transport.
 
-在 UnixNetVConnection 中，net_read_io 则直接调用了独立函数 read_from_net(nh, this, lthread) 。
+In UnixNetVConnection, net_read_io directly calls the independent function read_from_net(nh, this, lthread).
 
-```
-// changed by YTS Team, yamsat
+`` `
+// changed by YTS team, yamsat
 void
 SSLNetVConnection::net_read_io(NetHandler *nh, EThread *lthread)
 {
-  int ret;
+  int right;
   int64_t r = 0;
   int64_t bytes = 0;
   NetState *s = &this->read;
 
-  // 如果是 blind tunnel，那么就使用 UnixNetVConnection::net_read_io 替代
-  // 相当于保持一致，不进行 SSL 处理，只做TCP Proxy转发
+  // If it is a blind tunnel, then use UnixNetVConnection::net_read_io instead
+  // Equivalent to consistent, no SSL processing, only TCP Proxy forwarding
   if (HttpProxyPort::TRANSPORT_BLIND_TUNNEL == this->attributes) {
     this->super::net_read_io(nh, lthread);
     return;
   }
 
-  // 尝试获取对此VC的VIO的Mutex锁
+  // Try to get the Mutex lock on this VC's VIO
   MUTEX_TRY_LOCK_FOR(lock, s->vio.mutex, lthread, s->vio._cont);
   if (!lock.is_locked()) {
-    // 如果没有拿到锁，就重新调度，等下一次再读取
-    // read_reschedule 会把此vc放回到read_ready_link的队列尾部
-    // 由于NetHandler的处理方式，必然会在本次EventSystem回调NetHandler中完成所有的读操作
-    //     不会延迟到下一次EventSystem对NetHandler的回调
+    // If you don't get the lock, reschedule it, wait until the next time you read it again.
+    // read_reschedule will put this vc back to the tail of the read_ready_link queue
+    // Due to the handling of NetHandler, all read operations will be completed in this EventSystem callback NetHandler.
+    // Will not delay until the next EventSystem callback to NetHandler
     readReschedule(nh);
     return;
   }
   // Got closed by the HttpSessionManager thread during a migration
   // The closed flag should be stable once we get the s->vio.mutex in that case
   // (the global session pool mutex).
-  // 拿到锁之后，首先判断该vc是否被异步关闭了，因为 HttpSessionManager 会管理一个全局的session池。
+  // After getting the lock, first determine if the vc is closed asynchronously, because HttpSessionManager will manage a global session pool.
   if (this->closed) {
-    // 这里为何不直接调用 close_UnixNetVConnection() ?
-    // 通过调用 UnixNetVConnection::net_read_io 来间接调用 close_UnixNetVConnection() 关闭 sslvc
+    // Why not call close_UnixNetVConnection() directly here?
+    // Indirectly call close_UnixNetVConnection() by calling UnixNetVConnection::net_read_io to close sslvc
     this->super::net_read_io(nh, lthread);
     return;
   }
   // If the key renegotiation failed it's over, just signal the error and finish.
-  // 出现这个状态是在配置里，禁止了 SSL Renegotiation，但是客户端又发起了 SSL Renegotiation 请求
+  // This state is in the configuration, SSL Renegotiation is disabled, but the client initiates an SSL Renegotiation request.
   if (sslClientRenegotiationAbort == true) {
-    // 此时直接报错，然后关闭 sslvc
+    // Report an error directly, then close sslvc
     this->read.triggered = 0;
     readSignalError(nh, (int)r);
     Debug("ssl", "[SSLNetVConnection::net_read_io] client renegotiation setting read signal error");
@@ -593,60 +593,60 @@ SSLNetVConnection::net_read_io(NetHandler *nh, EThread *lthread)
   // If it is not enabled, lower its priority.  This allows
   // a fast connection to speed match a slower connection by
   // shifting down in priority even if it could read.
-  // 再判断，该vc的读操作是否被异步禁止了
+  // Determine if the vc read operation is asynchronously disabled.
   if (!s->enabled || s->vio.op != VIO::READ) {
     read_disable(nh, this);
     return;
   }
   
-  // 下面才开始进入读操作前的准备工作
-  // 获取缓冲区，准备写入数据
+  // The following is the preparation for the read operation.
+  // Get the buffer, ready to write data
   MIOBufferAccessor &buf = s->vio.buffer;
-  // 在VIO中定义了总共需要读取的数据的总长度，还有已经完成的数据读取长度
-  // ntodo 是剩余的，还需要读取的数据长度
+  // Define the total length of the total data that needs to be read in VIO, and the length of the data read that has been completed.
+  // ntodo is the remaining data length that needs to be read
   int64_t ntodo = s->vio.ntodo();
   ink_assert(buf.writer());
 
   // Continue on if we are still in the handshake
-  // 前面讲过，SSL/TLS 握手过程是一个子状态机，就嵌入到了 net_read_io 和 write_to_net_io 里面
-  // getSSLHandShakeComplete() 返回的是成员 sslHandShakeComplete，表示是否完成了SSL握手过程
+  // As mentioned earlier, the SSL/TLS handshake process is a substate machine embedded in net_read_io and write_to_net_io.
+  // getSSLHandShakeComplete() returns the member sslHandShakeComplete, indicating whether the SSL handshake process has been completed.
   if (!getSSLHandShakeComplete()) {
-    // 如果没有完成SSL握手过程，那么就进入SSL握手处理过程
+    // If the SSL handshake process is not completed, then the SSL handshake process is entered.
     int err;
 
-    // getSSLClientConnection() 返回的是成员 sslClientConnection，表示这是否是一个由ATS发起的SSL连接
-    // 如果由ATS发起，那么ATS就是SSL Client，否则ATS就是SSL Server
-    // 调用 sslStartHandShake 来进行握手，传递握手方式，指明这是ATS作为 Client 还是 Server 的握手过程
+    // getSSLClientConnection() returns the member sslClientConnection, indicating whether this is an SSL connection initiated by ATS
+    // If initiated by ATS, ATS is SSL Client, otherwise ATS is SSL Server
+    // Call sslStartHandShake to handshake and pass the handshake method to indicate whether this is the handshake process of ATS as Client or Server.
     if (getSSLClientConnection()) {
-      // ATS 作为 SSL Client
+      // ATS as SSL Client
       ret = sslStartHandShake(SSL_EVENT_CLIENT, err);
     } else {
-      // ATS 作为 SSL Server
-      // 会设置 this->attributes 的属性，例如 Blind Tunnel
+      // ATS as SSL Server
+      // will set the properties of this->attributes, such as Blind Tunnel
       ret = sslStartHandShake(SSL_EVENT_SERVER, err);
     }
     // If we have flipped to blind tunnel, don't read ahead
-    // 下面的部分主要是判断对Blind Tunnel的处理
+    // The following sections are mainly for judging the processing of the Blind Tunnel.
     if (this->handShakeReader && this->attributes != HttpProxyPort::TRANSPORT_BLIND_TUNNEL) {
-      // 如果不是Blind Tunnel，而且 MIOBuffer *handShakeBuffer 关联的 IOBufferReader *handShakeReader 不为空
-      //     就需要对 handShakeBuffer 中的数据进行处理
+      // If it is not a Blind Tunnel, and the IOBufferReader *handShakeReader associated with MIOBuffer *handShakeBuffer is not empty
+      // need to process the data in handShakeBuffer
       // Check and consume data that has been read
       if (BIO_eof(SSL_get_rbio(this->ssl))) {
         this->handShakeReader->consume(this->handShakeBioStored);
         this->handShakeBioStored = 0;
       }
     } else if (this->attributes == HttpProxyPort::TRANSPORT_BLIND_TUNNEL) {
-      // 如果是Blind Tunnel，那就需要透传数据，不按照SSL连接来处理
+      // If it is a Blind Tunnel, it needs to transparently transmit data and not process it according to the SSL connection.
       //     dest_ip=1.2.3.4 action=tunnel ssl_cert_name=servercert.pem ssl_key_name=privkey.pem
       // Now in blind tunnel. Set things up to read what is in the buffer
       // Must send the READ_COMPLETE here before considering
       // forwarding on the handshake buffer, so the
       // SSLNextProtocolTrampoline has a chance to do its
       // thing before forwarding the buffers.
-      // 此时SSLVC关联的状态机还是 SSLNextProtocolTrampoline，
-      //     因此下面这个READ_COMPLETE是传递给 SSLNextProtocolTrampoline::ioCompletionEvent
-      //     通过蹦床重新为 SSLVC 设置状态机，然后 SSLNextProtocolTrampoline 被 delete
-      //     对于Blind Tunnel，状态机是HttpSM
+      // The state machine associated with SSLVC is still SSLNextProtocolTrampoline,
+      // So the following READ_COMPLETE is passed to SSLNextProtocolTrampoline::ioCompletionEvent
+      // Re-set the state machine for SSLVC through the trampoline, then SSLNextProtocolTrampoline is deleted
+      // For the Blind Tunnel, the state machine is HttpSM
       this->readSignalDone(VC_EVENT_READ_COMPLETE, nh);
 
       // If the handshake isn't set yet, this means the tunnel
@@ -654,51 +654,51 @@ SSLNetVConnection::net_read_io(NetHandler *nh, EThread *lthread)
       // the client hello message back into the standard read.vio
       // so it will get forwarded onto the origin server
       if (!this->getSSLHandShakeComplete()) {
-        // 如果没有完成SSL握手，就强制设置为已经完成
+        // If the SSL handshake is not completed, it is forced to be set to completed.
         this->sslHandShakeComplete = 1;
 
         // Copy over all data already read in during the SSL_accept
         // (the client hello message)
-        // 然后把接收到客户端发送的原始的SSL数据（Raw Data）复制到 SSLVC 的 Read VIO 中
+        // Then copy the raw SSL data (Raw Data) received from the client to the Read VIO of SSLVC
         NetState *s = &this->read;
         MIOBufferAccessor &buf = s->vio.buffer;
         int64_t r = buf.writer()->write(this->handShakeHolder);
         s->vio.nbytes += r;
-        s->vio.ndone += r;
+        s-> vio.ndone + = r;
 
         // Clean up the handshake buffers
-        // 然后释放掉 SSL 的 MIOBuffer *handShakeBuffer 以及关联的 handShakeReader 和 handShakeHolder
+        // Then release the MIOBuffer *handShakeBuffer of SSL and the associated handShakeReader and handShakeHolder
         this->free_handshake_buffers();
 
-        // 如果 handShakeBuffer 中是有数据的，那么上面就执行了数据的复制，Read VIO 中就有了新数据
-        //     此时就要向上层状态机发送一个 READ_COMPLETE 的事件。
+        // If there is data in handShakeBuffer, then the data is copied above, and there is new data in Read VIO.
+        // At this point, an event of READ_COMPLETE is sent to the upper state machine.
         if (r > 0) {
           // Kick things again, so the data that was copied into the
           // vio.read buffer gets processed
           this->readSignalDone(VC_EVENT_READ_COMPLETE, nh);
         }
       }
-      // 由于是 Blind Tunnel，在设置SSL握手状态为完成后，直接就返回
-      //     后面就转为Tunnel的处理，纯TCP的转发
+      // Since it is a Blind Tunnel, it will return directly after setting the SSL handshake state to complete.
+      // After the conversion to the tunnel processing, pure TCP forwarding
       return;
     }
     
-    // 根据 sslStartHandShake() 的返回值进行相应的处理
-    // 需要考虑 ATS 作为 Server 或者 Client 的两种情况
+    // According to the return value of sslStartHandShake () for the corresponding processing
+    // Need to consider ATS as a Server or Client two cases
     if (ret == EVENT_ERROR) {
-      // 错误处理，直接关闭VC，回调蹦床 ioCompletionEvent 传递 VC_EVENT_ERROR 事件类型，lerror = err;
-      // err 的值在 sslStartHandShake 中设置，通常为 syscall 或者 openssl 库的错误代码。
+      // Error handling, directly close the VC, callback trampoline ioCompletionEvent pass VC_EVENT_ERROR event type, lerror = err;
+      // The value of err is set in sslStartHandShake, usually the error code for the syscall or openssl library.
       this->read.triggered = 0;
       readSignalError(nh, err);
     } else if (ret == SSL_HANDSHAKE_WANT_READ || ret == SSL_HANDSHAKE_WANT_ACCEPT) {
-      // 为了完成握手过程，需要读取更多数据
+      // In order to complete the handshake process, more data needs to be read.
       if (SSLConfigParams::ssl_handshake_timeout_in > 0) {
-        // 如果设置了 SSL 握手超时时间
+        // If the SSL handshake timeout is set
         double handshake_time = ((double)(Thread::get_hrtime() - sslHandshakeBeginTime) / 1000000000);
         Debug("ssl", "ssl handshake for vc %p, took %.3f seconds, configured handshake_timer: %d", this, handshake_time,
               SSLConfigParams::ssl_handshake_timeout_in);
         if (handshake_time > SSLConfigParams::ssl_handshake_timeout_in) {
-          // 发现超时，同样进行错误处理，然后关闭连接，但是固定传递 EOS 的状态
+          // Found a timeout, the same error handling, and then close the connection, but the state of the EOS is fixed
           Debug("ssl", "ssl handshake for vc %p, expired, release the connection", this);
           read.triggered = 0;
           nh->read_ready_list.remove(this);
@@ -706,52 +706,52 @@ SSLNetVConnection::net_read_io(NetHandler *nh, EThread *lthread)
           return;
         }
       }
-      // 从 NetHandler 的队列里清除 SSLVC，等下一次有数据时再继续处理
-      // 注意跟 disable 的区别，disable 会同时从 epoll 里删除 vc 对应的 socket fd
-      // 而这里只是在本次 NetHandler 的处理循环中跳过此 SSLVC，等下一次 epoll_wait 再次触发
+      // Clear SSLVC from the NetHandler queue and wait until the next time there is data.
+      // Note the difference with disable, disable will remove the socket fd corresponding to vc from epoll
+      // And here is just skipping this SSLVC in the processing loop of this NetHandler, and the next time epoll_wait is triggered again
       read.triggered = 0;
       nh->read_ready_list.remove(this);
       readReschedule(nh);
     } else if (ret == SSL_HANDSHAKE_WANT_CONNECT || ret == SSL_HANDSHAKE_WANT_WRITE) {
-      // 为了完成握手过程，需要发送更多数据
-      // 通常是当前缓冲区满了，因此等待下一次缓冲区可写时再继续发送
-      // 同样要注意跟 disable 的区别
+      // In order to complete the handshake process, more data needs to be sent.
+      // Usually the current buffer is full, so wait for the next buffer to be written before continuing to send
+      // Also pay attention to the difference with disable
       write.triggered = 0;
       nh->write_ready_list.remove(this);
       writeReschedule(nh);
-    } else if (ret == EVENT_DONE) { // 出现此情况的时候，要进行深入的判断
+    } else if (ret == EVENT_DONE) { // When this happens, make an in-depth judgment
       // If this was driven by a zero length read, signal complete when
       // the handshake is complete. Otherwise set up for continuing read
       // operations.
-      // 原文注释翻译：如果这是由 0 长度读操作驱动的一次调用，
-      //     EVENT_DONE 表示完成了握手过程，需要向蹦床 ioCompletionEvent 传递 READ_COMPLETE 事件。
-      //     否则，需要继续读取数据，那么 EVENT_DONE 则只是表示没有错误。
+      // Original comment translation: If this is a call driven by a 0 length read operation,
+      // EVENT_DONE indicates that the handshake process is complete and the READ_COMPLETE event needs to be passed to the trampoline ioCompletionEvent.
+      // Otherwise, you need to continue reading the data, then EVENT_DONE just means there is no error.
       
-      // ntodo 表示剩余需要读取的字节数，这里我觉得应该用 nbytes 来判断是否是 0 长度的读操作 ？？？ TS-4216
+      // ntodo indicates the number of bytes that need to be read. I think I should use nbytes to determine if it is a 0-length read operation. ? ? TS-4216
       if (ntodo <= 0) {
-        // 进入 0 长度读操作驱动的调用处理过程
+        // Enter the 0 length read operation driven call processing
         if (!getSSLClientConnection()) {
-          // 当此 SSLVC 对于 ATS 是 SSL Server 端时
-          // 由于在 accept 上设置了 TCP_DEFER_ACCEPT 属性，因此对于一个新 Accept 的连接，需要判断是否有新数据。
+          // When this SSLVC is for the ATS is the SSL Server side
+          // Since the TCP_DEFER_ACCEPT attribute is set on accept, for a new Accept connection, it is necessary to determine if there is new data.
           // we will not see another ET epoll event if the first byte is already
           // in the ssl buffers, so, SSL_read if there's anything already..
-          // 因此要直接做一次读取操作，来试试看是否有新数据
+          // So you have to do a read directly to see if there is new data.
           Debug("ssl", "ssl handshake completed on vc %p, check to see if first byte, is already in the ssl buffers", this);
-          // 创建 iobuf 用于接收数据
+          // Create an iobuf to receive data
           this->iobuf = new_MIOBuffer(BUFFER_SIZE_INDEX_4K);
           if (this->iobuf) {
-            // 创建 iobuf 成功，分配reader
+            // Create iobuf successfully, assign reader
             this->reader = this->iobuf->alloc_reader();
-            // 设置 Read VIO 内的 buffer 为 iobuf
-            // 使用writer_for的方法设置之后，再向vio.buffer写入数据时，实际是写入了 this->iobuf 内。
-            //     同时，vio.buffer 是不可读的，如果想要读取 this->iobuf 内的数据，需要通过 this->reader 完成。
-            // 这里的iobuf在之前指向：SSLNextProtocolAccept::buffer（为了实现设置 0 长度读取操作）
-            //     SSLNextProtocolAccept::buffer 是不可以写数据的，因此这里要切换成新分配的 MIOBuffer
+            // Set the buffer in Read VIO to iobuf
+            // After using the writer_for method to set, and then write data to vio.buffer, it is actually written in this->iobuf.
+            // At the same time, vio.buffer is unreadable. If you want to read the data in this->iobuf, you need to do it with this->reader.
+            // The iobuf here points to: SSLNextProtocolAccept::buffer (in order to implement the set 0 length read operation)
+            // SSLNextProtocolAccept::buffer is not able to write data, so here you have to switch to the newly assigned MIOBuffer
             s->vio.buffer.writer_for(this->iobuf);
-            // 进行数据读取操作（因为有 TCP_DEFER_ACCEPT）：
-            //     从 SSLVC 的 socket 上读取数据，然后通过 vio.buffer 将数据写入 this->iobuf
+            // Perform a data read operation (because of TCP_DEFER_ACCEPT):
+            // Read data from the SSLVC socket and write the data to this->iobuf via vio.buffer
             ret = ssl_read_from_net(this, lthread, r);
-            // 读操作可能会遇到 SSL EOS 的情况，需要做一个判断，例如握手的加密算法不支撑，协商失败等。
+            // The read operation may encounter the situation of SSL EOS, and a judgment is needed. For example, the encryption algorithm of the handshake is not supported, the negotiation fails, and the like.
             if (ret == SSL_READ_EOS) {
               this->eosRcvd = true;
             }
@@ -764,39 +764,39 @@ SSLNetVConnection::net_read_io(NetHandler *nh, EThread *lthread)
           } else {
             Error("failed to allocate MIOBuffer after handshake, vc %p", this);
           }
-          // 这里虽然做了 disable，但是下面紧跟着回调蹦床的时候，会再次重新设置 VIO
+          // Although it has been disabled here, it will reset VIO again when it is followed by the callback trampoline.
           read.triggered = 0;
           read_disable(nh, this);
         }
-        // 回调蹦床 ioCompletionEvent 传递 READ_COMPLETE 事件，表示完成了握手过程
-        // 此时会由蹦床回调上层状态机，上层状态机会重新设置 VIO，激活此 SSLVC
+        // Callback trampoline ioCompletionEvent pass READ_COMPLETE event, indicating that the handshake process is completed
+        // At this point, the upper state machine will be called back by the trampoline, and the upper state machine will reset VIO to activate this SSLVC.
         readSignalDone(VC_EVENT_READ_COMPLETE, nh);
       } else {
-        // 这不是一次 0 长度读操作驱动的调用，需要继续读取数据，在 NetHandler 中激活该 NetVC
+        // This is not a 0-length read operation driven call, need to continue reading data, activate the NetVC in NetHandler
         read.triggered = 1;
         if (read.enabled)
           nh->read_ready_list.in_or_enqueue(this);
       }
     } else if (ret == SSL_WAIT_FOR_HOOK) {
       // avoid readReschedule - done when the plugin calls us back to reenable
-      // 当 plugin 回调 reenable 的时候，避免调用readReschedule
-      // 在后面讲解 SSL Hook 的时候，再详细分析这块。
+      // Avoid calling readReschedule when the plugin callback is reenable
+      // When I explain the SSL Hook later, analyze this block in detail.
     } else {
-      // 其它情况，调用readReschedule
-      // 底层调用 read_reschedule(nh, vc); 实现
+      // In other cases, call readReschedule
+      // The underlying call read_reschedule (nh, vc);
       //     当 read.triggered == 1 && read.enabled == 1 的时候
       //     调用 nh->read_ready_list.in_or_enqueue(vc);
       readReschedule(nh);
     }
-    // 在SSL握手处理过程中，直接返回 NetHandler
+    // Return NetHandler directly during SSL handshake processing
     return;
   }
-  // 如果SSL握手已经完成
-  // 下面的部分就与 UnixNetVConnection::net_read_io 差不多了
-  //     只不过这个是调用 ssl_read_from_net 代替 read
+  // If the SSL handshake is complete
+  // The following section is almost the same as UnixNetVConnection::net_read_io
+  // just this is to call ssl_read_from_net instead of read
 
   // If there is nothing to do or no space available, disable connection
-  // 如果VIO被关闭或者Read VIO的MIOBuffer被写满了，就禁止读
+  // If VIO is turned off or Read VIO's MIOBuffer is full, it is forbidden to read
   if (ntodo <= 0 || !buf.writer()->write_avail()) {
     read_disable(nh, this);
     return;
@@ -804,33 +804,33 @@ SSLNetVConnection::net_read_io(NetHandler *nh, EThread *lthread)
 
   // At this point we are at the post-handshake SSL processing
   // If the read BIO is not already a socket, consider changing it
-  // 握手完成后：
-  //     需要把Read BIO从内存块类型切换为Socket类型
+  // After the handshake is completed:
+  // Need to switch Read BIO from memory block type to Socket type
   if (this->handShakeReader) {
     // Check out if there is anything left in the current bio
-    // 查看内存块类型的Read BIO内是否还有数据
+    // Check if there is still data in the Read BIO of the memory block type
     if (!BIO_eof(SSL_get_rbio(this->ssl))) {
-      // BIO_eof() 在遇到EOF时返回 1
+      // BIO_eof() returns 1 when encountering EOF
       // Still data remaining in the current BIO block
-      // 仍然有数据，那么 handshake buffer 应该已经跟当前 SSL会话的 Read BIO 绑定了
-      // 等后面调用 ssl_read_from_net 时，就会通过 Read BIO 来消费 handshake buffer 内的数据
+      // There is still data, then the handshake buffer should already be bound to the Read BIO of the current SSL session.
+      // When the ssl_read_from_net is called later, the data in the handshake buffer is consumed by Read BIO.
     } else {
-      // Read BIO内已经被读空了，
-      // 此处把handShakeBioStored记录的上一次填充到Read BIO的字节从handShakeReader中消费掉
+      // Read BIO has been read empty,
+      // The last time the handShakeBioStored record was filled into the Read BIO byte is consumed from the handShakeReader
       // Consume what SSL has read so far.
       this->handShakeReader->consume(this->handShakeBioStored);
 
       // If we are empty now, switch over
-      // 消费完成之后，再看一下handShakeReader中是否还有数据
+      // After the consumption is complete, look at the data in the handShakeReader.
       if (this->handShakeReader->read_avail() <= 0) {
-        // handShakeReader中也没有数据了，那么就可以直接切换Read BIO为Socket类型
+        // There is no data in handShakeReader, then you can directly switch Read BIO to Socket type
         // Switch the read bio over to a socket bio
         SSL_set_rfd(this->ssl, this->get_socket());
-        // 然后释放handShake buffers，会将 handShakeReader 设置为 NULL
+        // then release handShake buffers, which sets handShakeReader to NULL
         this->free_handshake_buffers();
       } else {
-        // 如果 handShakeReader 中还有可读取的数据，
-        // 那么就要利用剩余的数据，再创建一个内存块类型的 Read BIO 并且绑定到SSL会话上
+        // If there is still readable data in handShakeReader,
+        // Then use the remaining data, create a Read BIO of the memory block type and bind to the SSL session.
         // Setup the next iobuffer block to drain
         char *start = this->handShakeReader->start();
         char *end = this->handShakeReader->end();
@@ -839,11 +839,11 @@ SSLNetVConnection::net_read_io(NetHandler *nh, EThread *lthread)
         // Sets up the buffer as a read only bio target
         // Must be reset on each read
         BIO *rbio = BIO_new_mem_buf(start, this->handShakeBioStored);
-        // 下面这个 set_mem_eof_return 的详细解读可以参考：
-        //     https://www.openssl.org/docs/faq.html#PROG15
-        //     https://www.openssl.org/docs/manmaster/crypto/BIO_s_mem.html
-        // 其实我没弄明白......
-        BIO_set_mem_eof_return(rbio, -1);
+        // The following detailed interpretation of set_mem_eof_return can be referenced:
+        // https://www.openssl.org/docs/faq.html#PROG15
+        // https://www.openssl.org/docs/manmaster/crypto/BIO_s_mem.html
+        // Actually, I didn’t figure it out...
+        BIO_set_mem_eof_return (rbio, -1);
         SSL_set_rbio(this->ssl, rbio);
       }
     }
@@ -853,8 +853,8 @@ SSLNetVConnection::net_read_io(NetHandler *nh, EThread *lthread)
   // not sure if this do-while loop is really needed here, please replace
   // this comment if you know
   do {
-    // 调用 ssl_read_from_net 读取并解密数据，
-    // 这里读取的数据可能来自内存块BIO也可以来自Socket BIO
+    // Call ssl_read_from_net to read and decrypt the data,
+    // The data read here may come from the memory block BIO can also come from Socket BIO
     ret = ssl_read_from_net(this, lthread, r);
     if (ret == SSL_READ_READY || ret == SSL_READ_ERROR_NONE) {
       bytes += r;
@@ -862,7 +862,7 @@ SSLNetVConnection::net_read_io(NetHandler *nh, EThread *lthread)
     ink_assert(bytes >= 0);
   } while ((ret == SSL_READ_READY && bytes == 0) || ret == SSL_READ_ERROR_NONE);
 
-  // 如果读取到了数据，则回调 VC_EVENT_READ_READY 到上层状态机
+  // If the data is read, callback VC_EVENT_READ_READY to the upper state machine
   if (bytes > 0) {
     if (ret == SSL_READ_WOULD_BLOCK || ret == SSL_READ_READY) {
       if (readSignalAndUpdate(VC_EVENT_READ_READY) != EVENT_CONT) {
@@ -872,8 +872,8 @@ SSLNetVConnection::net_read_io(NetHandler *nh, EThread *lthread)
     }
   }
 
-  // 对最后一次调用 ssl_read_from_net 的返回值进行判断
-  switch (ret) {
+  // Judge the return value of the last call to ssl_read_from_net
+  switch (right) {
   case SSL_READ_ERROR_NONE:
   case SSL_READ_READY:
     readReschedule(nh);
@@ -927,24 +927,24 @@ SSLNetVConnection::net_read_io(NetHandler *nh, EThread *lthread)
     break;
   }
 }
-```
+`` `
 
 ### ssl_read_from_net
 
-ssl_read_from_net 并不是 sslvc 的成员方法：
+Ssl_read_from_net is not a member method of sslvc:
 
-  - 它是对 SSLReadBuffer 的封装，
-    - 而 SSLReadBuffer 又是对 OpenSSL API 函数 SSL_read 的封装
+  - it is a wrapper around SSLReadBuffer,
+    - and SSLReadBuffer is a wrapper around the OpenSSL API function SSL_read
 
-```
+`` `
 static int
 ssl_read_from_net(SSLNetVConnection *sslvc, EThread *lthread, int64_t &ret)
-```
+`` `
 
-ssl_read_from_net 的返回值是直接对 SSL_read 返回值的映射：
+The return value of ssl_read_from_net is a direct mapping to the return value of SSL_read:
 
 |           SSL_read           |        ssl_read_from_net        |
-|:----------------------------:|:-------------------------------:|
+|: ----------------------------::: ------------------- --------------: |
 |  SSL_ERROR_NONE              |  SSL_READ_ERROR_NONE(0)         |
 |  SSL_ERROR_SYSCALL           |  SSL_READ_ERROR(1)              |
 |                              |  SSL_READ_READY(2)              |
@@ -955,117 +955,117 @@ ssl_read_from_net 的返回值是直接对 SSL_read 返回值的映射：
 |  SSL_ERROR_ZERO_RETURN       |  SSL_READ_EOS(5)                |
 |  SSL_ERROR_WANT_WRITE        |  SSL_WRITE_WOULD_BLOCK(10)      |
 
-ssl_read_from_net 的调用者需要对上面的返回值进行处理：
+The caller of ssl_read_from_net needs to process the return value above:
 
   - SSL_READ_WOULD_BLOCK 和 SSL_WRITE_WOULD_BLOCK
-    - 表示需要等待下一次 NetHandler 回调
+    - indicates that you need to wait for the next NetHandler callback
   - SSL_READ_ERROR_NONE 和 SSL_READ_READY
-    - 表示已经成功读取了一些数据，但是Kernel TCP/IP Buffer里还有数据，还可以继续读
+    - Indicates that some data has been successfully read, but there is still data in the Kernel TCP/IP Buffer, and you can continue reading.
   - SSL_READ_COMPLETE
-    - 表示 VIO 设定的数据读取长度已经完成
+    - indicates that the data read length of the VIO setting has been completed.
   - SSL_READ_EOS
-    - 表示连接中断了
+    - indicates that the connection is broken
   - SSL_READ_ERROR
-    - 表示读取操作遇到了错误
+    - indicates that the read operation encountered an error
 
-在整个SSL的实现里，还使用了下面这些映射：
+In the entire SSL implementation, the following mappings are also used:
 
 |       SSL_accept/connect     |  sslServer/ClientHandShakeEvent |
-|:----------------------------:|:-------------------------------:|
+|: ----------------------------::: ------------------- --------------: |
 |  SSL_ERROR_WANT_READ         |  SSL_HANDSHAKE_WANT_READ(6)     |
 |  SSL_ERROR_WANT_WRITE        |  SSL_HANDSHAKE_WANT_WRITE(7)    |
 |  SSL_ERROR_WANT_ACCEPT       |  SSL_HANDSHAKE_WANT_ACCEPT(8)   |
 |  SSL_ERROR_WANT_CONNECT      |  SSL_HANDSHAKE_WANT_CONNECT(9)  |
 |                              |  SSL_WAIT_FOR_HOOK(11)          |
 
-这几个值在SSL握手过程中使用，上面所有这些值都是在 SSLNetVConnection.cc 的头部定义的宏。
+These values are used during the SSL handshake, all of which are macros defined in the header of SSLNetVConnection.cc.
 
 ### write_to_net_io (write_to_net)
 
-write_to_net_io 并不是 sslvc 的成员方法，SSLNetVConnection 与 UnixNetVConnection 共享此函数。
+Write_to_net_io is not a member method of sslvc, and SSLNetVConnection shares this function with UnixNetVConnection.
 
-在 write_to_net_io 中同时考虑了 NetVC 类型为 SSLNetVConnection 与 UnixNetVConnection 的两种情况。
+Both netVC types of SSLNetVConnection and UnixNetVConnection are considered in write_to_net_io.
 
-但是在实际发送数据时则调用了 vc->load_buffer_and_write 来完成，以实现SSL会话上的数据加密传输。
+However, when the data is actually sent, vc->load_buffer_and_write is called to complete the data encryption transmission on the SSL session.
 
-在 CH02-IOCoreNet 的 CH02S09-Core-UnixNetVConnection 中的 [nethandler的延伸：从miobuffer到socket](https://github.com/oknet/atsinternals/blob/master/CH02-IOCoreNET/CH02S09-Core-UnixNetVConnection.md#nethandler的延伸从miobuffer到socket) 已经对 write_to_net_io 进行了分析，但是跳过了 SSL 的部分，下面就要翻回来继续看 SSL 部分的代码。
+[Extension of nethandler: from miobuffer to socket] in CH02-09-Core-UnixNetVConnection of CH02-IOCoreNet (https://github.com/oknet/atsinternals/blob/master/CH02-IOCoreNET/CH02S09-Core-UnixNetVConnection.md #nethandler extends from miobuffer to socket) The write_to_net_io has been parsed, but the SSL part has been skipped. Let's go back and look at the SSL part of the code.
 
-```
+`` `
 void
 write_to_net_io(NetHandler *nh, UnixNetVConnection *vc, EThread *thread)
 {
-  // ...... 略去部分代码
+  // ...... omit part of the code
   
   // This function will always return true unless
   // vc is an SSLNetVConnection.
-  // 如果 vc 的类型是 SSLNetVConnection，那么返回 SSL 握手是否完成的状态值，
-  // 如果 vc 的类型不是 SSLNetVConnection，那么返回值固定为 true，取反后就是 false 了。
-  // 由于我们要分析的是 SSLVC，因此这里假定 vc 的类型是 SSLNetVConnection。
+  // If the type of vc is SSLNetVConnection, then return the status value of whether the SSL handshake is complete,
+  // If the type of vc is not SSLNetVConnection, the return value is fixed to true, and the inverse is false.
+  // Since we are analyzing SSLVC, we assume that the type of vc is SSLNetVConnection.
   if (!vc->getSSLHandShakeComplete()) {
-    // 没有完成 SSL 握手
-    int err, ret;
+    // did not complete the SSL handshake
+    int err right
 
-    // 确认 sslvc 的方向，是作为 SSL Client，还是 SSL Server？
-    // 此处与 net_read_io 的部分一样
+    // Confirm the direction of sslvc as SSL Client or SSL Server?
+    // here is the same as the part of net_read_io
     if (vc->getSSLClientConnection())
       ret = vc->sslStartHandShake(SSL_EVENT_CLIENT, err);
     else
       ret = vc->sslStartHandShake(SSL_EVENT_SERVER, err);
 
-    // 根据 sslStartHandShake() 的返回值进行相应的处理
-    // 需要考虑 ATS 作为 Server 或者 Client 的两种情况
+    // According to the return value of sslStartHandShake () for the corresponding processing
+    // Need to consider ATS as a Server or Client two cases
     if (ret == EVENT_ERROR) {
-      // 遇到错误，关闭写，向上层状态机回调
+      // encountered an error, close the write, call back to the upper state machine
       vc->write.triggered = 0;
       write_signal_error(nh, vc, err);
     } else if (ret == SSL_HANDSHAKE_WANT_READ || ret == SSL_HANDSHAKE_WANT_ACCEPT) {
-      // 需要读取更多数据，但是缓冲区已经空了
-      // 因此重新调度 read 操作，等 NetHandler::mainNetEvent 的下一次回调
+      // need to read more data, but the buffer is empty
+      // So reschedule the read operation, wait for the next callback of NetHandler::mainNetEvent
       vc->read.triggered = 0;
       nh->read_ready_list.remove(vc);
       read_reschedule(nh, vc);
     } else if (ret == SSL_HANDSHAKE_WANT_CONNECT || ret == SSL_HANDSHAKE_WANT_WRITE) {
-      // 需要发送更多数据，但是缓冲区已经满了
-      // 因此重新调度 write 操作，等 NetHandler::mainNetEvent 的下一次回调
+      // need to send more data, but the buffer is full
+      // So reschedule the write operation, wait for the next callback of NetHandler::mainNetEvent
       vc->write.triggered = 0;
       nh->write_ready_list.remove(vc);
       write_reschedule(nh, vc);
     } else if (ret == EVENT_DONE) {
-      // 完成了握手操作
-      // 激活 write 操作，让数据传输的部分来判断Write VIO的情况
-      // 但是需要注意，只有 triggered 和 enabled 都设置为 1 的时候，NetHandler::mainNetEvent 才会回调
-      //       enabled 表示之前曾经调用过 do_io()
-      //     triggered 表示 epoll_wait 发现此 vc 的 socket fd 上有数据活动
+      // Completed the handshake operation
+      // Activate the write operation, let the data transfer part to determine the situation of Write VIO
+      // But note that NetHandler::mainNetEvent will only call back when both triggered and enabled are set to 1.
+      // enabled means that do_io() was called before.
+      // triggered indicates that epoll_wait has found data activity on this vc socket fd
       vc->write.triggered = 1;
       if (vc->write.enabled)
         nh->write_ready_list.in_or_enqueue(vc);
     } else
       // 其它返回值，例如：SSL_WAIT_FOR_HOOK，SSL_READ_WOULD_BLOCK，SSL_WRITE_WOULD_BLOCK 等
-      // 直接重新调度 write 操作，等 NetHandler::mainNetEvent 的下一次回调
+      // Reschedule the write operation directly, wait for the next callback of NetHandler::mainNetEvent
       write_reschedule(nh, vc);
     return;
   }
   
-  // ...... 略去部分代码
+  // ...... omit part of the code
 }
-```
+`` `
 
 ### load_buffer_and_write
 
-load_buffer_and_write 的功能是将 buf 中的 towrite 字节数据通过 SSL 加密通道发送。
+The function of load_buffer_and_write is to send the towrite byte data in buf through the SSL encrypted channel.
 
-  - total_written 用来表示成功发送的字节数
-  - wattempted 用来表示尝试发送的字节数
-  - needs 表示在返回调用者后，调用者需要再次激活 read 和/或 write
+  - total_written is used to indicate the number of bytes successfully sent
+  - wattempted is used to indicate the number of bytes attempted to be sent
+  - needs indicates that after returning to the caller, the caller needs to activate read and/or write again
 
-返回值
+return value
 
-  - 如果 towrite 字节全部成功发送，那么返回值等于 total_written
-  - 如果 towrite 字节部分成功发送，那么：
-    - 返回值大于0，表示 buf 中可发送的数据长度可能小于 towrite 字节
-    - 返回值小于0，表示最后一次发送时返回的错误值
+  - If the towrite bytes are all successfully sent, then the return value is equal to total_written
+  - If the towrite byte part is successfully sent, then:
+    - The return value is greater than 0, indicating that the length of data that can be sent in buf may be less than the towrite byte.
+    - The return value is less than 0, indicating the error value returned on the last transmission
 
-```
+`` `
 int64_t
 SSLNetVConnection::load_buffer_and_write(int64_t towrite, int64_t &wattempted, int64_t &total_written, MIOBufferAccessor &buf,
                                          int &needs)
@@ -1080,12 +1080,12 @@ SSLNetVConnection::load_buffer_and_write(int64_t towrite, int64_t &wattempted, i
   int64_t offset = buf.reader()->start_offset;
   IOBufferBlock *b = buf.reader()->block;
 
-  // 在SSL发送的时候，是把一个明文数据块加密后发出，加密之后被叫做 TLS record。
-  // 接收端必须收到一个完整的 TLS record 才能进行解密，但是受限于 TCP 连接的传输情况，
-  //   每次能够发送的 TCP 报文大小是不同的，如果 TLS record 的长度需要跨越多个 TCP 报文，
-  //   接收端就必须将多个 TCP 报文合并之后，得到一个完整的 TLS record 才可以进行解密。
-  // 在 ATS 中采用了一种动态调整明文数据块大小的方法，让加密后的 TLS record 尽可能在一个 TCP 报文中传递，
-  //   这样接收端每收到一个 TCP 报文，就可以得到一个完整的 TLS record，可以立即解密并获得明文内容。
+  // When SSL is sent, a plaintext block is encrypted and sent. After encryption, it is called TLS record.
+  // The receiving end must receive a full TLS record to decrypt, but is limited by the transmission of the TCP connection.
+  // The size of the TCP packets that can be sent each time is different. If the length of the TLS record needs to span multiple TCP packets,
+  // The receiving end must merge multiple TCP packets to get a complete TLS record before decrypting.
+  // A method of dynamically adjusting the plaintext block size is adopted in the ATS, so that the encrypted TLS record is transmitted in a TCP message as much as possible.
+  // In this way, every time the receiving end receives a TCP packet, it can get a complete TLS record, which can be decrypted immediately and obtain the plaintext content.
   // Dynamic TLS record sizing
   ink_hrtime now = 0;
   if (SSLConfigParams::ssl_maxrecord == -1) {
@@ -1100,18 +1100,18 @@ SSLNetVConnection::load_buffer_and_write(int64_t towrite, int64_t &wattempted, i
           sslLastWriteTime, msec_since_last_write);
   }
 
-  // 判断 Blind Tunnel 的情况，通过 UnixNetVConnection::load_buffer_and_write() 执行
-  //   感觉这里应该放在 Dyn TLS record sizing 之前处理会比较好啊。
+  // Determine the situation of the Blind Tunnel, through UnixNetVConnection::load_buffer_and_write ()
+  // It feels better to handle this before Dyn TLS record sizing.
   if (HttpProxyPort::TRANSPORT_BLIND_TUNNEL == this->attributes) {
     return this->super::load_buffer_and_write(towrite, wattempted, total_written, buf, needs);
   }
 
-  // 用于 SSL 跟踪调试
+  // for SSL trace debugging
   bool trace = getSSLTrace();
   Debug("ssl", "trace=%s", trace ? "TRUE" : "FALSE");
 
   do {
-    // 准备用于发送的数据块，计算其长度
+    // Prepare the data block for sending and calculate its length
     // check if we have done this block
     l = b->read_avail();
     l -= offset;
@@ -1127,7 +1127,7 @@ SSLNetVConnection::load_buffer_and_write(int64_t towrite, int64_t &wattempted, i
       l = wavail;
     }
 
-    // 仍然是为了 Dyn TLS record sizing
+    // still for Dyn TLS record sizing
     // TS-2365: If the SSL max record size is set and we have
     // more data than that, break this into smaller write
     // operations.
@@ -1151,22 +1151,22 @@ SSLNetVConnection::load_buffer_and_write(int64_t towrite, int64_t &wattempted, i
       break;
     }
 
-    // 设置 wattempted 为本次期望发送的字节数
+    // Set the number of bytes sent by the desired output for this time
     wattempted = l;
-    // 设置 total_writen 为本次成功发送后的总发送字节数
-    //   这个设置好奇怪？？
+    // Set total_writen to the total number of bytes sent after this successful transmission.
+    // Is this setting strange? ?
     total_written += l;
     Debug("ssl", "SSLNetVConnection::loadBufferAndCallWrite, before SSLWriteBuffer, l=%" PRId64 ", towrite=%" PRId64 ", b=%p", l,
           towrite, b);
-    // 调用 SSLWriteBuffer 进行数据的加密和发送
-    //   ssl 为SSL CTX描述符
-    //   b->start() + offset 为准备发送的明文数据内容的起始地址
-    //   l 为期望发送的字节数
-    //   r 为成功发送的字节数
-    //   当出现错误时，err为非0值
+    // Call SSLWriteBuffer for data encryption and transmission
+    // ssl is the SSL CTX descriptor
+    // b->start() + offset is the starting address of the plaintext data content to be sent
+    // l is the number of bytes expected to be sent
+    // r is the number of bytes successfully sent
+    // err is non-zero when an error occurs
     err = SSLWriteBuffer(ssl, b->start() + offset, l, r);
 
-    // 根据需要显示 SSL 的调试信息
+    // Display debug information for SSL as needed
     if (!origin_trace) {
       TraceOut((0 < r && trace), get_remote_addr(), get_remote_port(), "WIRE TRACE\tbytes=%d\n%.*s", (int)r, (int)r,
                b->start() + offset);
@@ -1178,73 +1178,73 @@ SSLNetVConnection::load_buffer_and_write(int64_t towrite, int64_t &wattempted, i
     }
 
     if (r == l) {
-      // 本次数据发送成功，设置 wattempted 为总发送字节数
+      // This data is sent successfully, set wattempted to the total number of bytes sent.
       wattempted = total_written;
     }
     
-    // 判断当前 IOBufferBlock 的发送是否受到 Dyn TLS record sizing 的影响而分片发送
+    // Determine whether the current IOBufferBlock transmission is affected by Dyn TLS record sizing and send the fragment
     if (l == orig_l) {
-      // 没有分片，则继续发送下一个 IOBufferBlock
+      // No fragmentation, continue to send the next IOBufferBlock
       // on to the next block
       offset = 0;
       b = b->next;
     } else {
-      // 出现分片，则继续发送当前 IOBufferBlock 剩余的部分
+      // If fragmentation occurs, continue to send the rest of the current IOBufferBlock
       offset += l;
     }
 
     Debug("ssl", "SSLNetVConnection::loadBufferAndCallWrite,Number of bytes written=%" PRId64 " , total=%" PRId64 "", r,
           total_written);
     NET_INCREMENT_DYN_STAT(net_calls_to_write_stat);
-    // 如果：
-    //   本轮发送成功：r == l
-    //   没有完全全部发送任务：total_written < towrite
-    //   还有承载数据的 IOBufferBlock：b
-    // 那么就继续下一个循环
+    // in case:
+    // This round is sent successfully: r == l
+    // Not all sent tasks: total_written < towrite
+    // There is also an IOBufferBlock that holds the data: b
+    // Then continue to the next loop
   } while (r == l && total_written < towrite && b);
 
   if (r > 0) {
-    // 从 while 跳出时，没有遇到错误
+    // I didn't encounter an error when jumping out of while
     sslLastWriteTime = now;
     sslTotalBytesSent += total_written;
     if (total_written != wattempted) {
-      // 没有完成所有的数据发送，此时 b==NULL
-      // 需要回调上层状态机 WRITE_READY，重新填充数据，然后重新调度写操作，
-      // 等待下一次NetHandler回调，继续完成数据的发送。
+      // did not complete all data transmission, at this time b==NULL
+      // Need to call back the upper state machine WRITE_READY, refill the data, and then reschedule the write operation,
+      // Wait for the next NetHandler callback and continue to complete the data transmission.
       Debug("ssl", "SSLNetVConnection::loadBufferAndCallWrite, wrote some bytes, but not all requested.");
       // I'm not sure how this could happen. We should have tried and hit an EAGAIN.
-      // 告知调用者（write_to_net_io），需要重新调度写操作
+      // Inform the caller (write_to_net_io), need to reschedule the write operation
       needs |= EVENTIO_WRITE;
-      // 返回最后一次成功发送的字节数
+      // Returns the number of bytes successfully sent last time
       return (r);
     } else {
-      // 完成了全部的数据发送，此时 total_written >= towrite
-      // !!! 这里需要注意 !!!
-      //   如果IOBufferBlock中可用于发送的数据量大于 towrite 值，会出现 total_written > towrite 的情况
-      //   这是bug？？
+      // Completed all data transmission, at this time total_written >= towrite
+      // !!! Here you need to pay attention!!!
+      // If total amount of data available for sending in IOBufferBlock is greater than towrite value, total_written > towrite will occur
+      // Is this a bug? ?
       Debug("ssl", "SSLNetVConnection::loadBufferAndCallWrite, write successful.");
-      // 返回实际发送成功的字节数
+      // Returns the number of bytes actually sent successfully
       return (total_written);
     }
   } else {
-    // 从 while 跳出时，遇到了错误
-    // 根据最后一次调用 SSLWriteBuffer 的返回值，判断错误类型
+    // I encountered an error when jumping out of while
+    // Determine the type of error based on the return value of the last call to SSLWriteBuffer
     switch (err) {
     case SSL_ERROR_NONE:
-      // 没有错误
+      // no error
       Debug("ssl", "SSL_write-SSL_ERROR_NONE");
       break;
     case SSL_ERROR_WANT_READ:
-      // 需要读取数据
+      // need to read the data
       needs |= EVENTIO_READ;
       r = -EAGAIN;
       SSL_INCREMENT_DYN_STAT(ssl_error_want_read);
       Debug("ssl.error", "SSL_write-SSL_ERROR_WANT_READ");
       break;
     case SSL_ERROR_WANT_WRITE:
-      // 需要发送数据
+      // need to send data
     case SSL_ERROR_WANT_X509_LOOKUP: {
-      // 需要查询X509
+      // need to query X509
       if (SSL_ERROR_WANT_WRITE == err) {
         SSL_INCREMENT_DYN_STAT(ssl_error_want_write);
       } else if (SSL_ERROR_WANT_X509_LOOKUP == err) {
@@ -1258,7 +1258,7 @@ SSLNetVConnection::load_buffer_and_write(int64_t towrite, int64_t &wattempted, i
       break;
     }
     case SSL_ERROR_SYSCALL:
-      // 在OpenSSL API调用系统API时遇到了错误
+      // encountered an error while calling the system API in the OpenSSL API
       TraceOut(trace, get_remote_addr(), get_remote_port(), "Syscall Error: %s", strerror(errno));
       r = -errno;
       SSL_INCREMENT_DYN_STAT(ssl_error_syscall);
@@ -1266,17 +1266,17 @@ SSLNetVConnection::load_buffer_and_write(int64_t towrite, int64_t &wattempted, i
       break;
     // end of stream
     case SSL_ERROR_ZERO_RETURN:
-      // 通常表示连接中断
-      // 区别于 read 操作，不返回EOS，因为不会对Write VIO回调VC_EVENT_EOS
+      // usually indicates that the connection is broken
+      // Different from the read operation, does not return EOS, because the Write VIO callback VC_EVENT_EOS will not be called
       TraceOut(trace, get_remote_addr(), get_remote_port(), "SSL Error: zero return");
       r = -errno;
       SSL_INCREMENT_DYN_STAT(ssl_error_zero_return);
       Debug("ssl.error", "SSL_write-SSL_ERROR_ZERO_RETURN");
       break;
     case SSL_ERROR_SSL:
-      // 表示遇到 SSL 内部错误
+      // indicates that an internal SSL error has been encountered
     default: {
-      char buf[512];
+      char buf [512];
       unsigned long e = ERR_peek_last_error();
       ERR_error_string_n(e, buf, sizeof(buf));
       TraceIn(trace, get_remote_addr(), get_remote_port(), "SSL Error: sslErr=%d, ERR_get_error=%ld (%s) errno=%d", err, e, buf,
@@ -1285,14 +1285,14 @@ SSLNetVConnection::load_buffer_and_write(int64_t towrite, int64_t &wattempted, i
       SSL_CLR_ERR_INCR_DYN_STAT(this, ssl_error_ssl, "SSL_write-SSL_ERROR_SSL errno=%d", errno);
     } break;
     }
-    // 返回调用者
+    // return to the caller
     return (r);
   }
 }
-```
+`` `
 
 
-## 参考资料
+## References
 
 - [P_SSLNetVConnection.h](http://github.com/apache/trafficserver/tree/master/iocore/net/P_SSLNetVConnection.h)
 - [SSLNetVConnection.cc](http://github.com/apache/trafficserver/tree/master/iocore/net/SSLNetVConnection.cc)
