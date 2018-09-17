@@ -72,7 +72,7 @@ At the same time, some methods have been added:
 
 In the following member methods, any new and overloaded UnixNetVConnection will be marked with a description.
 
-`` `
+```
 // Inherited from UnixNetVConnection
 class SSLNetVConnection : public UnixNetVConnection
 {
@@ -436,7 +436,7 @@ private:
 typedef int (SSLNetVConnection::*SSLNetVConnHandler)(int, void *);
 
 extern ClassAllocator<SSLNetVConnection> sslNetVCAllocator;
-`` `
+```
 
 ## SSL/TLS Implementation Introduction
 
@@ -462,7 +462,7 @@ Since it is a substate machine, there must be a pointcut. This pointcut is:
 
 Remember how the NetHandler::mainNetEvent section calls the two methods above?
 
-`` `
+```
   // UnixNetVConnection *
   while ((vc = read_ready_list.dequeue())) {
     if (vc->closed)
@@ -482,7 +482,7 @@ Remember how the NetHandler::mainNetEvent section calls the two methods above?
       write_ready_list.remove(vc);
     }
   }
-`` `
+```
 
 The following is the UnixNetVConnection read and write process:
 
@@ -543,7 +543,7 @@ Net_read_io() is a member method of SSLNetVConnection and contains code for both
 
 In UnixNetVConnection, net_read_io directly calls the independent function read_from_net(nh, this, lthread).
 
-`` `
+```
 // changed by YTS team, yamsat
 void
 SSLNetVConnection::net_read_io(NetHandler *nh, EThread *lthread)
@@ -927,7 +927,7 @@ SSLNetVConnection::net_read_io(NetHandler *nh, EThread *lthread)
     break;
   }
 }
-`` `
+```
 
 ### ssl_read_from_net
 
@@ -936,10 +936,10 @@ Ssl_read_from_net is not a member method of sslvc:
   - it is a wrapper around SSLReadBuffer,
     - and SSLReadBuffer is a wrapper around the OpenSSL API function SSL_read
 
-`` `
+```
 static int
 ssl_read_from_net(SSLNetVConnection *sslvc, EThread *lthread, int64_t &ret)
-`` `
+```
 
 The return value of ssl_read_from_net is a direct mapping to the return value of SSL_read:
 
@@ -990,7 +990,7 @@ However, when the data is actually sent, vc->load_buffer_and_write is called to 
 
 [Extension of nethandler: from miobuffer to socket] in CH02-09-Core-UnixNetVConnection of CH02-IOCoreNet (https://github.com/oknet/atsinternals/blob/master/CH02-IOCoreNET/CH02S09-Core-UnixNetVConnection.md #nethandler extends from miobuffer to socket) The write_to_net_io has been parsed, but the SSL part has been skipped. Let's go back and look at the SSL part of the code.
 
-`` `
+```
 void
 write_to_net_io(NetHandler *nh, UnixNetVConnection *vc, EThread *thread)
 {
@@ -1048,7 +1048,7 @@ write_to_net_io(NetHandler *nh, UnixNetVConnection *vc, EThread *thread)
   
   // ...... omit part of the code
 }
-`` `
+```
 
 ### load_buffer_and_write
 
@@ -1065,7 +1065,7 @@ return value
     - The return value is greater than 0, indicating that the length of data that can be sent in buf may be less than the towrite byte.
     - The return value is less than 0, indicating the error value returned on the last transmission
 
-`` `
+```
 int64_t
 SSLNetVConnection::load_buffer_and_write(int64_t towrite, int64_t &wattempted, int64_t &total_written, MIOBufferAccessor &buf,
                                          int &needs)
@@ -1289,7 +1289,7 @@ SSLNetVConnection::load_buffer_and_write(int64_t towrite, int64_t &wattempted, i
     return (r);
   }
 }
-`` `
+```
 
 
 ## References
