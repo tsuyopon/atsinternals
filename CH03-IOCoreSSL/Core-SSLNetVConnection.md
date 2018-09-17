@@ -5,10 +5,10 @@ SSLNetVConnection inherits from UnixNetVConnection and builds support for SSL se
 As with UnixNetVConnection, there is also a comparison of the IOCoreSSL subsystem, which is the same as EventSystem. There are also Thread, Processor and Event, but the names are different:
 
 |  EventSystem   |         IOCoreNet         |         IOCoreSSL         |
-|:--------------:|:-------------------------:|:-------------------------::|
+|:--------------:|:-------------------------:|:-------------------------:|
 |      Event     |     UnixNetVConnection    |     SSLNetVConnection     |
-| EThread | NetHandler, InactivityCop | NetHandler, InactivityCop |
-| EventProcessor | NetProcessor | sslNetProcessor |
+|     EThread    | NetHandler，InactivityCop | NetHandler, InactivityCop |
+| EventProcessor |        NetProcessor       |      sslNetProcessor      |
 
 - Like Event and UnixNetVConnection, SSLNetVConnection also provides a way to the upper state machine
   - do_io_* series
@@ -944,7 +944,7 @@ ssl_read_from_net(SSLNetVConnection *sslvc, EThread *lthread, int64_t &ret)
 The return value of ssl_read_from_net is a direct mapping to the return value of SSL_read:
 
 |           SSL_read           |        ssl_read_from_net        |
-|:----------------------------:::---------------------------------:|
+|:----------------------------:|:-------------------------------:|
 |  SSL_ERROR_NONE              |  SSL_READ_ERROR_NONE(0)         |
 |  SSL_ERROR_SYSCALL           |  SSL_READ_ERROR(1)              |
 |                              |  SSL_READ_READY(2)              |
@@ -971,7 +971,7 @@ The caller of ssl_read_from_net needs to process the return value above:
 In the entire SSL implementation, the following mappings are also used:
 
 |       SSL_accept/connect     |  sslServer/ClientHandShakeEvent |
-|:----------------------------:::---------------------------------:|
+|:----------------------------:|:-------------------------------:|
 |  SSL_ERROR_WANT_READ         |  SSL_HANDSHAKE_WANT_READ(6)     |
 |  SSL_ERROR_WANT_WRITE        |  SSL_HANDSHAKE_WANT_WRITE(7)    |
 |  SSL_ERROR_WANT_ACCEPT       |  SSL_HANDSHAKE_WANT_ACCEPT(8)   |
