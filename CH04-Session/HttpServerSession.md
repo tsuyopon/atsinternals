@@ -1,53 +1,53 @@
-# 核心组件：HttpServerSession
+# core component: HttpServerSession
 
-HttpServerSession 与 HttpClientSession 相似，其内也包含了 NetVConnection 的成员，是对 NetVConnection 的扩展。
+HttpServerSession is similar to HttpClientSession and also contains members of NetVConnection, an extension to NetVConnection.
 
-HttpServerSession 直接继承自 VConnection 基类，在 ATS 中没有设计 ProxyServerSession 这样一个中间层的继承类。
+HttpServerSession inherits directly from the VConnection base class. There is no intermediate class inheritance class in ProxServerSession in ATS.
 
-与所有的 VConnection 继承类一样：
+Same as all VConnection inheritance classes:
 
-  - 提供 do_io_*()
-  - 提供 reenable() 方法
+  - Offered do_io _ * ()
+  - provide reenable () way
 
-在 HttpServerSession::new_connection 方法中要求传入一个 NetVConnection，相对于 HttpClientSession::new_connection 传入的参数要少
+Passing a NetVConnection in the HttpServerSession::new_connection method requires less parameters than HttpClientSession::new_connection
 
-  - 传入的 NetVConnection 对象会保存到 HttpServerSession::server_vc 成员中
+  - The incoming NetVConnection object is saved to the HttpServerSession::server_vc member
 
-比较特别的地方是，HttpServerSession 不是一个状态机，它没有定义任何事件回调函数
+What's special is that HttpServerSession is not a state machine, it does not define any event callback function.
 
-  - 但是 HttpClientSession::state_state_keep_alive 是专门为 HttpServerSession 服务的
+  - But HttpClientSession::state_state_keep_alive is specifically for HttpServerSession
 
-因此，HttpServerSession 是从属于 HttpClientSession 的
+Therefore, HttpServerSession is subordinate to HttpClientSession
 
-  - 第一个HTTP请求由 HttpSM 解析完成后，如果需要连接 OServer 时
-    - 则会在 NetVConnection 连接成功后创建 HttpServerSession 对象
-  - 此时 HttpServerSession 上的事件都由 HttpSM 处理
-  - 把第一个HTTP请求对应的响应发送给客户端之后，HttpSM 把 HttpServerSession 交给 HttpClientSession 来管理，HttpSM 则会释放自身，此时
-    - Client NetVConnection 上的事件由 HttpClientSession 处理
-    - OServer NetVConnection 上的事件也由 HttpClientSession 处理
-    - 此时处于一个 TCP 连接上，第一个HTTP请求结束后，第二个HTTP请求还未到来的“间隙”
-  - 第二个HTTP请求由 HttpSM 解析完成后，如果需要连接 OServer 时
-    - 则会向 HttpClientSession 请求之前使用过的 HttpServerSession，如果存在就会继续复用
-  - 然后新的 HttpSM 会接管 HttpServerSession 上的事件
-  - 如此重复执行...
+  - After the first HTTP request is parsed by HttpSM, if you need to connect to OServer
+    - an HttpServerSession object is created after the NetVConnection connection is successful
+  - The events on the HttpServerSession are now handled by HttpSM
+  - After sending the response corresponding to the first HTTP request to the client, HttpSM will pass the HttpServerSession to the HttpClientSession for management, and HttpSM will release itself.
+    - Events on Client NetVConnection are handled by HttpClientSession
+    - Events on OServer NetVConnection are also handled by HttpClientSession
+    - At this point on a TCP connection, after the first HTTP request is over, the second HTTP request has not yet arrived.
+  - After the second HTTP request is parsed by HttpSM, if you need to connect to OServer
+    - will request the HttpServerSession used before to HttpClientSession, continue to reuse if it exists
+  - Then the new HttpSM will take over the events on the HttpServerSession
+  - Repeat this way...
 
-如果在“间隙”时遇到 HttpClientSession 被动关闭的情况，或者 HttpServerSession 出现了 Keep alive 超时
+If the HttpClientSession is passively closed during the "gap", or the HttpServerSession has a Keep alive timeout
 
-  - HttpServerSession 则会被 ServerSessionPool 接管
-  - ServerSessionPool 会设置一个新的超时时间
+  - HttpServerSession will be taken over by ServerSessionPool
+  - ServerSessionPool will set a new timeout
 
-HttpServerSession 最终将关闭
+HttpServerSession will eventually close
 
-  - 达到 ServerSessionPool 设置的超时时间
-  - OServer 主动关闭了TCP连接
+  - Timeout to reach the ServerSessionPool setting
+  - OServer actively closes the TCP connection
 
-## 定义
+## definition
 
-```
+`` `
 class HttpServerSession : public VConnection
 {
 public:
-  // 构造函数
+  // Constructor
   HttpServerSession()
     : VConnection(NULL), hostname_hash(), con_id(0), transact_count(0), state(HSS_INIT), to_parent_proxy(false),
       server_trans_stat(0), private_session(false), sharing_match(TS_SERVER_SESSION_SHARING_MATCH_BOTH),
@@ -57,50 +57,50 @@ public:
     ink_zero(server_ip);
   }
 
-  // 销毁自身
+  // destroy itself
   void destroy();
-  // 接受新的 NetVConnection
+  // accept the new NetVConnection
   void new_connection(NetVConnection *new_vc);
 
-  // 重置 MIOBuffer
+  // Reset MIOBuffer
   void
   reset_read_buffer(void)
   {
     ink_assert(read_buffer->_writer);
     ink_assert(buf_reader != NULL);
-    // 释放所有的 IOBufferReader
-    // 除了当前正在写入的 IOBufferBlock，之前未读取的 IOBufferBlock 都会被自动释放掉
+    // release all IOBufferReader
+    // In addition to the IOBufferBlock currently being written, the previously unread IOBufferBlock will be automatically released.
     read_buffer->dealloc_all_readers();
-    // 把当前正在写入的 IOBufferBlock 也释放掉
+    // Release the IOBufferBlock that is currently being written
     read_buffer->_writer = NULL;
-    // 重新分配一个 IOBufferReader
+    // Reassign an IOBufferReader
     buf_reader = read_buffer->alloc_reader();
   }
 
-  // 获得 IOBufferReader
+  // Get IOBufferReader
   IOBufferReader *
   get_reader()
   {
     return buf_reader;
   };
 
-  // 透传给 netvc 的 do_io_read
+  // pass to netvc's do_io_read
   virtual VIO *do_io_read(Continuation *c, int64_t nbytes = INT64_MAX, MIOBuffer *buf = 0);
-  // 透传给 netvc 的 do_io_write
+  // pass to net_do_do_write
   virtual VIO *do_io_write(Continuation *c = NULL, int64_t nbytes = INT64_MAX, IOBufferReader *buf = 0, bool owner = false);
-  // 除了调用 netvc 的 do_io_close，最后还销毁了 HttpServerSession 自身
+  // In addition to calling dovc_do_close, the HttpServerSession itself is destroyed.
   virtual void do_io_close(int lerrno = -1);
-  // 透传给 netvc 的 do_io_shutdown
+  // pass to the netvc do_io_shutdown
   virtual void do_io_shutdown(ShutdownHowTo_t howto);
-  // 透传给 netvc 的 reenable
+  // passable to netvc's reenable
   virtual void reenable(VIO *vio);
 
-  // 脱离与 HttpSM 或 HttpClientSession 的关联，把自身放入到 ServerSessionPool 中
-  // 如果是私有会话，或者关闭了 ServerSession 的共享功能，则直接调用 do_io_close
+  // Decouple from HttpSM or HttpClientSession and put itself into ServerSessionPool
+  // If it is a private session, or if the sharing function of ServerSession is turned off, then directly call do_io_close
   void release();
-  // 计算给定 hostname 的MD5值，并保存到成员 hostname_hash 中
+  // Calculate the MD5 value for the given hostname and save it to the member hostname_hash
   void attach_hostname(const char *hostname);
-  // 获取成员 server_vc
+  // Get member server_vc
   NetVConnection *
   get_netvc()
   {
@@ -108,16 +108,16 @@ public:
   };
 
   // Keys for matching hostnames
-  // 用来在 SessionPool 中查找的凭据
-  // 可以根据 OServer的IP，请求的 Hostname 来进行查找
+  // the credentials used to find in the SessionPool
+  // can be based on the OServer IP, the requested Hostname to find
   IpEndpoint server_ip;
   INK_MD5 hostname_hash;
 
-  // HttpServerSession 的唯一 ID
+  // Unique ID of HttpServerSession
   int64_t con_id;
-  // 该 HttpServerSession 上处理过的事务／请求总数
+  // The total number of transactions/requests processed on this HttpServerSession
   int transact_count;
-  // HttpServerSession 的状态
+  // The status of the HttpServerSession
   HSS_State state;
 
   // Used to determine whether the session is for parent proxy
@@ -125,26 +125,26 @@ public:
   // We need to determine whether a closed connection was to
   // close parent proxy to update the
   // proxy.process.http.current_parent_proxy_connections
-  // 判断这是否是一个连接到 Parent Proxy 的 HttpServerSession
-  // 用于辅助实现对当前ATS与Parent Proxy连接数量的统计
+  // Determine if this is an HttpServerSession connected to the Parent Proxy
+  // Used to assist in the statistics of the current number of ATS and Parent Proxy connections
   bool to_parent_proxy;
 
   // Used to verify we are recording the server
   //   transaction stat properly
-  // 该值为 0 表示 HttpServerSession 未被 HttpSM 管理
-  // 该值为 1 表示 HttpServerSession 正被 HttpSM 接管
-  // 其它值均为异常情况
+  // The value is 0 means HttpServerSession is not managed by HttpSM
+  // The value is 1 to indicate that the HttpServerSession is being taken over by HttpSM
+  // other values are abnormal
   int server_trans_stat;
 
   // Sessions become if authentication headers
   //  are sent over them
-  // 用来标记私有会话，通常指该会话有HTTP认证头信息
+  // used to mark a private session, usually means that the session has HTTP authentication header information
   bool private_session;
 
   // Copy of the owning SM's server session sharing settings
-  // 在 HttpSM::state_http_server_open 中，复制当前 HttpSM 中的会话共享设置
-  TSServerSessionSharingMatchType sharing_match; // 匹配方式（None，IP，Host，Both）
-  TSServerSessionSharingPoolType sharing_pool;   // 采用全局会话池或线程本地会话池
+  // Copy the session sharing settings in the current HttpSM in HttpSM::state_http_server_open
+  TSServerSessionSharingMatchType sharing_match; // Matching method (None, IP, Host, Both)
+  TSServerSessionSharingPoolType sharing_pool; // Use global session pool or thread local session pool
   //  int share_session;
 
   LINK(HttpServerSession, ip_hash_link);
@@ -152,7 +152,7 @@ public:
 
   // Keep track of connection limiting and a pointer to the
   // singleton that keeps track of the connection counts.
-  // 对连接到 OServer 的 TCP 连接进行控制
+  // Control the TCP connection to the OServer
   bool enable_origin_connection_limiting;
   ConnectionCount *connection_count;
 
@@ -163,8 +163,8 @@ public:
   //   changing the buffer we are doing I/O on.  We can
   //   not change the buffer for I/O without issuing a
   //   an asyncronous cancel on NT
-  // 用来接收 OServer 回应的 HTTP Response Header
-  // 用来在“间隙”中接收可能的无效数据
+  // HTTP Response Header used to receive OServer responses
+  // used to receive possible invalid data in the "gap"
   MIOBuffer *read_buffer;
 
 private:
@@ -173,113 +173,113 @@ private:
   NetVConnection *server_vc;
   int magic;
 
-  // 保持 read_buffer 中的数据不会被随意释放
-  // 只有执行 reset_read_buffer 才会释放 read_buffer 中的数据
+  // Keep the data in read_buffer will not be freely released
+  // The data in read_buffer is only released when reset_read_buffer is executed
   IOBufferReader *buf_reader;
 };
-```
+`` `
 
-## 状态（State）
+## Status (State)
 
-在 HttpServerSession 的定义中通过一个枚举类型定义了四个状态值，用来指示 HttpServerSession 的状态：
+Four state values are defined in the definition of HttpServerSession by an enumerated type to indicate the state of the HttpServerSession:
 
   - HSS_INIT
-    - 初始状态，在构造函数中设置为该状态
-    - 在 new_connection 中会再次设置为该状态
+    - initial state, set to this state in the constructor
+    - will be set to this state again in new_connection
   - HSS_ACTIVE
-    - 在 HttpSM 调用 new_connection 返回之后会立即设置为该状态
-    - 在 HttpSM 从 HttpClientSession 获得之前使用的 HttpServerSession 后，会设置为该状态
-    - 在 HttpSessionManager 从 ServerSessionPool 中获取 HttpServerSession 后，会设置为该状态
+    - Set to this state immediately after HttpSM calls new_connection return
+    - Set to this state after HttpSM gets the HttpServerSession from HttpClientSession
+    - After the HttpSessionManager gets the HttpServerSession from the ServerSessionPool, it is set to this state
   - HSS_KA_CLIENT_SLAVE
-    - 表示 HttpServerSession 正在被 HttpClientSession 接管
-    - 当 HttpServerSession 遇到超时后，会被放入 ServerSessionPool
+    - indicates that HttpServerSession is being taken over by HttpClientSession
+    - When HttpServerSession encounters a timeout, it will be placed in ServerSessionPool
   - HSS_KA_SHARED
-    - 表示 HttpServerSession 正在被 ServerSessionPool 接管
+    - indicates that HttpServerSession is being taken over by ServerSessionPool
 
-## 方法
+## Method
 
-HttpServerSession 的方法比较少，这与其作为 HttpClientSession 的附属对象有很大的关系。
+There are fewer methods for HttpServerSession, which has a lot to do with it as a dependency of HttpClientSession.
 
-一个 HttpServerSession 对象在整个生命周期中会被三个状态机管理：
+An HttpServerSession object is managed by three state machines throughout its lifecycle:
 
   - HttpClientSession
   - HttpSM
   - ServerSessionPool
 
-所以，其自身并没有任何的事件处理函数，需要提供的 Interface 基本上就是 VConnection 的 do_io 系列，以及下面几个。
+So, there is no event handler for itself. The interface that needs to be provided is basically the do_io series of VConnection, and the following.
 
-在 HttpSM 向 OServer 发起连接之前，会查看 HttpClientSession 上是否存在已经绑定的 HttpServerSession，
-还会对比当前请求的目标 OServer 是否与已经绑定的 HttpServerSession 匹配，如果不匹配就会：
+Before HttpSM initiates a connection to OServer, it will check whether there is a bound HttpServerSession on HttpClientSession.
+It also compares whether the current requested target OServer matches the already bound HttpServerSession. If it does not match:
 
-  - 调用 HttpServerSession::release 解除 HttpServerSession 与 HttpSM 的关联
-  - 然后调用 HttpClientSession::attach_server_session 解除 HttpServerSession 与 HttpClientSession 的绑定关系
-  - 然后发起到 OServer 的连接
+  - Call HttpServerSession::release to unlink HttpServerSession from HttpSM
+  - Then call HttpClientSession::attach_server_session to unbind the HttpServerSession from the HttpClientSession
+  - Then initiate a connection to OServer
 
-在连接成功建立之后会回调 NET_EVENT_OPEN 事件到 HttpSM::state_http_server_open
+Callback NET_EVENT_OPEN event to HttpSM::state_http_server_open after the connection is successfully established
 
-```
-// 传入已经完成TCP连接建立的 NetVConnection
+`` `
+// Pass in the NetVConnection that has completed the TCP connection establishment
 void
 HttpServerSession::new_connection(NetVConnection *new_vc)
 {
   ink_assert(new_vc != NULL);
-  // 保存 NetVC 到 server_vc 成员
+  // Save NetVC to server_vc member
   server_vc = new_vc;
 
   // Used to do e.g. mutex = new_vc->thread->mutex; when per-thread pools enabled
-  // 使用 NetVC 的 mutex 来设置 HttpServerSession 的 mutex
+  // Use NetVC's mutex to set the mutex of HttpServerSession
   mutex = new_vc->mutex;
 
   // Unique client session identifier.
-  // 生成 HttpServerSession 的唯一 ID，用来在 Debug 信息中追踪
+  // Generate a unique ID of HttpServerSession, used to track in the Debug information
   con_id = ink_atomic_increment((int64_t *)(&next_ss_id), 1);
 
-  // 设置 magic 值，用来发现内存分配错误
+  // Set the magic value to find memory allocation error
   magic = HTTP_SS_MAGIC_ALIVE;
-  // 更新当前源服务器并发连接数
+  // Update the current source server concurrent connections
   HTTP_SUM_GLOBAL_DYN_STAT(http_current_server_connections_stat, 1); // Update the true global stat
-  // 更新源服务器连接数总计数
+  // Update the total number of source server connections
   HTTP_INCREMENT_DYN_STAT(http_total_server_connections_stat);
   // Check to see if we are limiting the number of connections
-  // per host
-  // 如果开启了对源服务器的连接数限制
-  // 在 HttpSM 发起对源服务器的TCP连接之前会首先判断指定 server_ip 上的连接数，
-  //     如已经超出最大值 origin_max_connections，则在一段时间之后重新调度 HttpSM
-  // 在 ServerSessionPool 收到 HttpServerSession 的超时事件时会判断指定 server_ip 的连接数，
-  //     如已经超过 origin_min_keep_alive_connections，则直接关闭 HttpServerSession
+  // by host
+  // If the connection limit to the source server is turned on
+  // Before HttpSM initiates a TCP connection to the source server, it first determines the number of connections on the specified server_ip.
+  // If the maximum value origin_max_connections has been exceeded, reschedule HttpSM after a period of time
+  // When the ServerSessionPool receives the timeout event of HttpServerSession, it will determine the number of connections specified by server_ip.
+  // If you have exceeded origin_min_keep_alive_connections, close HttpServerSession directly
   if (enable_origin_connection_limiting == true) {
     if (connection_count == NULL)
       connection_count = ConnectionCount::getInstance();
-    // 对该 server_ip 的连接数增量
+    // The number of connections to the server_ip is incremented
     connection_count->incrementCount(server_ip);
-    char addrbuf[INET6_ADDRSTRLEN];
+    char addrbuf [INET6_ADDRSTRLEN];
     Debug("http_ss", "[%" PRId64 "] new connection, ip: %s, count: %u", con_id,
           ats_ip_ntop(&server_ip.sa, addrbuf, sizeof(addrbuf)), connection_count->getCount(server_ip));
   }
-  // 创建 MIOBuffer
+  // Create MIOBuffer
 #ifdef LAZY_BUF_ALLOC
   read_buffer = new_empty_MIOBuffer(HTTP_SERVER_RESP_HDR_BUFFER_INDEX);
 #else
   read_buffer = new_MIOBuffer(HTTP_SERVER_RESP_HDR_BUFFER_INDEX);
 #endif
-  // 为 MIOBuffer 分配 IOBufferReader
+  // Assign IOBufferReader to MIOBuffer
   buf_reader = read_buffer->alloc_reader();
   Debug("http_ss", "[%" PRId64 "] session born, netvc %p", con_id, new_vc);
-  // 设置状态
+  // Set the status
   state = HSS_INIT;
 }
-```
+`` `
 
-在 HttpSM::state_http_server_open 中调用 new_connection 之后，
+After calling new_connection in HttpSM::state_http_server_open,
 
-  - 继续调用 HttpSM::attach_server_session
-    - 设置 HttpServerSession 的回调函数为 HttpSM::state_send_server_request_header
-    - 通过 do_io_read 接收数据
-    - 通过 do_io_write 关闭数据发送
-  - 然后调用 HttpSM::handle_http_server_open 完成发送请求给 OServer 的操作
-    - 如果客户端是 HTTP POST 请求，可能流程会有变化
+  - Continue to call HttpSM::attach_server_session
+    - Set the callback function of HttpServerSession to HttpSM::state_send_server_request_header
+    - Receive data via do_io_read
+    - Turn off data transmission via do_io_write
+  - Then call HttpSM::handle_http_server_open to complete the operation of sending the request to OServer
+    - If the client is an HTTP POST request, there may be a change in the process
 
-HttpSM 会先处理 OServer 的回应头，然后会建立 HttpTunnel 传输返回的内容，此时 HttpServerSession 的以下事件：
+HttpSM will first process the response header of OServer, and then it will create the content returned by HttpTunnel, and the following events of HttpServerSession:
 
   - VC_EVENT_EOS
   - VC_EVENT_ERROR
@@ -287,50 +287,50 @@ HttpSM 会先处理 OServer 的回应头，然后会建立 HttpTunnel 传输返�
   - VC_EVENT_ACTIVE_TIMEOUT
   - VC_EVENT_INACTIVITY_TIMEOUT
 
-由 HttpSM::tunnel_handler_server 接管。
+Take over by HttpSM::tunnel_handler_server.
 
-在 HttpSM::tunnel_handler_server 中会进行如下的判断：
+The following judgment is made in HttpSM::tunnel_handler_server:
 
-  - 如果已经收到了 EOS 事件，
-    - 那么就调用 HttpServerSession::do_io_close 关闭。
-  - 如果不允许 OServer 的连接复用，
-    - 那么就调用 HttpClientSession::attach_server_session 把 HttpServerSession 附到 HttpClientSession 上。
-  - 如果允许连接复用，
-    - 设置 keep alive 超时时间，然后调用 HttpServerSession::release 与 HttpSM 脱离
+  - If you have received an EOS event,
+    - Then call HttpServerSession::do_io_close to close.
+  - If connection multiplexing of OServer is not allowed,
+    - Then call HttpClientSession::attach_server_session to attach the HttpServerSession to the HttpClientSession.
+  - If connection multiplexing is allowed,
+    - Set the keep alive timeout and then call HttpServerSession::release to detach from HttpSM
 
-```
-// 关闭并释放 HttpServerSession
+`` `
+// Close and release HttpServerSession
 void
 HttpServerSession::do_io_close(int alerrno)
 {
-  // 如果是从 HttpSM 中发起的
+  // If it is initiated from HttpSM
   if (state == HSS_ACTIVE) {
-    // 更新当前源服务器的并发事务数，该值在 HttpSM::attach_server_session 中做增量
+    // Update the number of concurrent transactions for the current source server. This value is incremented in HttpSM::attach_server_session
     HTTP_DECREMENT_DYN_STAT(http_current_server_transactions_stat);
-    // HttpServerSession 的引用数减少
+    // The number of references to HttpServerSession is reduced
     this->server_trans_stat--;
   }
 
   Debug("http_ss", "[%" PRId64 "] session closing, netvc %p", con_id, server_vc);
 
-  // 关闭 NetVConnection
+  // close NetVConnection
   server_vc->do_io_close(alerrno);
-  // 解除与 NetVConnection 的关联
+  // Unlink from NetVConnection
   server_vc = NULL;
 
-  // 更新当前源服务器的并发连接数
+  // Update the number of concurrent connections to the current source server
   HTTP_SUM_GLOBAL_DYN_STAT(http_current_server_connections_stat, -1); // Make sure to work on the global stat
-  // 统计平均每一个源服务器上完成的事务数量
+  // Count the average number of transactions completed on each source server
   HTTP_SUM_DYN_STAT(http_transactions_per_server_con, transact_count);
 
   // Check to see if we are limiting the number of connections
-  // per host
-  // 如果开启了对源服务器的连接数限制
+  // by host
+  // If the connection limit to the source server is turned on
   if (enable_origin_connection_limiting == true) {
     if (connection_count->getCount(server_ip) > 0) {
-      // 对该 server_ip 的连接数减量
+      // The number of connections to the server_ip is reduced
       connection_count->incrementCount(server_ip, -1);
-      char addrbuf[INET6_ADDRSTRLEN];
+      char addrbuf [INET6_ADDRSTRLEN];
       Debug("http_ss", "[%" PRId64 "] connection closed, ip: %s, count: %u", con_id,
             ats_ip_ntop(&server_ip.sa, addrbuf, sizeof(addrbuf)), connection_count->getCount(server_ip));
     } else {
@@ -338,24 +338,24 @@ HttpServerSession::do_io_close(int alerrno)
     }
   }
 
-  // 如果是连接到 Parent Proxy 的
+  // If it is connected to the Parent Proxy
   if (to_parent_proxy) {
-    // 更新当前到 Parent Proxy 的并发连接数，该值在 HttpSM::state_http_server_open 中做增量
+    // Update the current number of concurrent connections to the Parent Proxy, which is incremented in HttpSM::state_http_server_open
     HTTP_DECREMENT_DYN_STAT(http_current_parent_proxy_connections_stat);
   }
-  // 释放资源，回收对象内存
+  // Release resources, recycle object memory
   destroy();
 }
-```
+`` `
 
-可以看到，只要调用了 HttpServerSession::do_io_close 则一定会关闭 NetVConnection 同时释放该对象，如果需要把 HttpServerSession 留下来复用，就需要通过：
+As you can see, as long as HttpServerSession::do_io_close is called, the NetVConnection will be closed and the object will be released. If you need to leave the HttpServerSession for reuse, you need to pass:
 
   - HttpServerSession::release
-    - 放入 ServerSessionPool
+    - Put in ServerSessionPool
   - HttpClientSession::attach_server_session
-    - 关联到 HttpClientSession
+    - Associated to HttpClientSession
 
-```
+`` `
 void
 HttpServerSession::release()
 {
@@ -364,64 +364,64 @@ HttpServerSession::release()
   state = HSS_KA_SHARED;
 
   // Private sessions are never released back to the shared pool
-  // 如果是 私有会话，或者配置文件中关闭了 ServerSessionPool 功能
-  //     则直接调用 do_io_close 关闭
+  // If it is a private session, or the ServerSessionPool function is turned off in the configuration file
+  // Then call do_io_close directly to close
   if (private_session || TS_SERVER_SESSION_SHARING_MATCH_NONE == sharing_match) {
     this->do_io_close();
     return;
   }
 
-  // 通过 HttpSessionManager 把 HttpServerSession 放入 ServerSessionPool
+  // Put HttpServerSession into ServerSessionPool via HttpSessionManager
   HSMresult_t r = httpSessionManager.release_session(this);
 
-  // 根据返回值判断是否成功放入
+  // According to the return value to determine whether the successful placement
   if (r == HSM_RETRY) {
     // Session could not be put in the session manager
     //  due to lock contention
-    // 由于没有拿到 ServerSessionPool 的锁，导致放入失败，需要再次重试
+    // Since the lock of ServerSessionPool was not taken, the insert failed and needs to be retried again
     // FIX:  should retry instead of closing
-    // 但是目前没有实现重试的机制，所以直接调用 do_io_close 关闭，
-    //     重试的逻辑需要将来实现了。
+    // But there is currently no mechanism to implement retry, so call do_io_close directly to close it.
+    // The logic of retrying needs to be implemented in the future.
     this->do_io_close();
   } else {
     // The session was successfully put into the session
     //    manager and it will manage it
-    // 成功放入到 ServerSessionPool 内
+    // successfully placed into the ServerSessionPool
     // (Note: should never get HSM_NOT_FOUND here)
-    // 此时 r 应该等于HSM_DONE
+    // r should now equal HSM_DONE
     ink_assert(r == HSM_DONE);
   }
 }
-```
+`` `
 
-释放和回收资源的 destroy 方法
+The destroy method for releasing and reclaiming resources
 
-```
+`` `
 void
 HttpServerSession::destroy()
 {
   ink_release_assert(server_vc == NULL);
   ink_assert(read_buffer);
   ink_assert(server_trans_stat == 0);
-  // 设置 magic
+  // set magic
   magic = HTTP_SS_MAGIC_DEAD;
-  // 释放 MIOBuffer
+  // release MIOBuffer
   if (read_buffer) {
     free_MIOBuffer(read_buffer);
     read_buffer = NULL;
   }
 
-  // 清理 mutex
+  // clean up mutex
   mutex.clear();
-  // 回收对象占用的内存
+  // Reclaim the memory occupied by the object
   if (TS_SERVER_SESSION_SHARING_POOL_THREAD == sharing_pool)
     THREAD_FREE(this, httpServerSessionAllocator, this_thread());
   else
     httpServerSessionAllocator.free(this);
 }
-```
+`` `
 
-## 参考资料
+## References
 
 - [HttpServerSession.h](http://github.com/apache/trafficserver/tree/master/proxy/http/HttpServerSession.h)
 - [HttpServerSession.cc](http://github.com/apache/trafficserver/tree/master/proxy/http/HttpServerSession.cc)

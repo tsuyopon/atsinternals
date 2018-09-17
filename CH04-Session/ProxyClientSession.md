@@ -1,40 +1,40 @@
-# 基础组件：ProxyClientSession
+# Base component: ProxyClientSession
 
-ProxyClientSession 是所有 XXXClientSession的基类。
+ProxyClientSession is the base class for all XXXClientSession.
 
-任何 XXXClientSession 都必需定义 start()，new_connection()，get_netvc()，release_netvc() 这四个方法:
+Any XXXClientSession must define four methods: start(), new_connection(), get_netvc(), release_netvc():
 
   - new_connection()
-    - 用来接受 XXXSessionAccept 的调用，传入 netvc，表示开始一个新的会话（Session）
+    - Used to accept a call to XXXSessionAccept, passing in netvc to start a new session (Session)
   - start()
-    - 表示开始一个新的事务（Transaction）
+    - indicates that a new transaction (Transaction) is started
   - get_netvc()
-    - 用来获得传入的 netvc
+    - used to get incoming netvc
   - release_netvc()
-    - 用来解除与 netvc 的关联
+    - used to unlink with netvc
 
-## 定义
+## definition
 
-ProxyClientSession 不能直接使用，必须定义其继承类来使用。
+ProxyClientSession cannot be used directly, you must define its inheritance class to use.
 
-```
+`` `
 class ProxyClientSession : public VConnection
 {
 public:
   ProxyClientSession();
 
-  // 回收 ClientSession 的资源
-  //   释放成员 api_hooks 占用的内存
-  //   释放成员 mutex 占用的内存
-  // 注意：
-  //   在继承类中需要定义此方法，用来释放对象占用的内存空间
-  //   调用该方法之前必须首先执行 do_io_close 和 release_netvc 两个方法。
-  // 这里是否应该声明为纯虚函数？
+  // Reclaim the resources of the ClientSession
+  // Release the memory occupied by member api_hooks
+  // Release the memory occupied by member mutex
+  // Caution:
+  // In the inheritance class need to define this method, used to release the memory space occupied by the object
+  // You must first execute the do_io_close and release_netvc methods before calling this method.
+  // Should this be declared as a pure virtual function?
   virtual void destroy();
-  // 开始一个事务
+  // start a transaction
   virtual void start() = 0;
 
-  // 开始一个会话
+  // Start a conversation
   virtual void new_connection(NetVConnection *new_vc, MIOBuffer *iobuf, IOBufferReader *reader, bool backdoor) = 0;
 
   virtual void
@@ -49,9 +49,9 @@ public:
     this->api_hooks.prepend(id, cont);
   }
 
-  // 获取与ClientSession对应的netvc
+  // Get the netvc corresponding to the ClientSession
   virtual NetVConnection *get_netvc() const = 0;
-  // 与netvc解除关联，但是不会关闭netvc
+  // Disassociated from netvc, but does not close netvc
   virtual void release_netvc() = 0;
 
   APIHook *
@@ -107,14 +107,14 @@ protected:
   bool hooks_on;
 
 private:
-  // 当前正在处理的Hook信息
-  //     Hook 等级（全局、会话、事务）
+  // Hook information currently being processed
+  // Hook level (global, session, transaction)
   APIHookScope api_scope;
   //     Hook ID
   TSHttpHookID api_hookid;
-  //     当前正在回调的与此Hook ID关联的Plugin回调函数
+  // The Plugin callback function associated with this Hook ID that is currently being called back
   APIHook *api_current;
-  // 所有注册到当前 ClientSession 的Plugin回调函数与Hook ID的对应关系
+  // Correspondence between all Plugin callback functions registered to the current ClientSession and Hook ID
   HttpAPIHooks api_hooks;
   void *user_args[HTTP_SSN_TXN_MAX_USER_ARG];
 
@@ -126,255 +126,255 @@ private:
 
   friend void TSHttpSsnDebugSet(TSHttpSsn, int);
 };
-```
+`` `
 
-## 方法
+## Method
 
-### 调试相关
+### Debug related
 
 debug()
 
-  - 返回成员 debug_on
-  - 用来指示当前Session是否开启了 Debug 功能
+  - Return member debug_on
+  - Used to indicate whether the current session has the Debug function enabled.
 
 
-### 自定义数据
+### Custom Data
 
 void *user_args[HTTP_SSN_TXN_MAX_USER_ARG];
 
-  - Session提供了这样的数组来保存自定义数据
+  - Session provides such an array to hold custom data
 
 set_user_arg(unsigned ix, void *arg)
 
-  - 可以在Session上关联一个指针，指向自定义数据
-  - ix 为索引号码，最大值为 HTTP_SSN_TXN_MAX_USER_ARG-1
+  - A pointer can be associated on the Session to point to custom data
+  - Ix is the index number, the maximum value is HTTP_SSN_TXN_MAX_USER_ARG-1
 
 get_user_arg(unsigned ix)
 
-  - 获取指向自定义数据的指针
-  - ix 为索引号码，最大值为 HTTP_SSN_TXN_MAX_USER_ARG-1
+  - Get a pointer to custom data
+  - Ix is the index number, the maximum value is HTTP_SSN_TXN_MAX_USER_ARG-1
 
-### Hook 相关
+### Hook Related
 
 hooks_enabled()
 
-  - 返回成员 hooks_on
-  - 用来指示当前Session是否开启了 Hook 功能
-  - 在构造函数中，默认初始化为 true
-  - 只有在 HttpClientSession 中，backdoor 为 true 时，才会设置为 false
+  - Return to member hooks_on
+  - Used to indicate whether the current session has the Hook function enabled.
+  - In the constructor, the default is initialized to true
+  - Set to false only if backdoor is true in HttpClientSession
 
 has_hooks()
 
-  - 通过查看 hook 链表，来确认当前的 Session 是否有任何的 hook 需要触发
+  - Check if the current session has any hooks to be triggered by looking at the hook list
 
 ssn_hook_prepend(TSHttpHookID id, INKContInternal *cont)
 
-  - 在 id 这个 HookID 上添加一个回调 cont
-  - 如果该 id 上已经有了其它的回调 cont，则把这个 cont 放在最前面
+  - Add a callback cont on the ook this HookID
+  - If there is already another callback cont on the id, put this cont at the top
 
 ssn_hook_append(TSHttpHookID id, INKContInternal *cont)
 
-  - 在 id 这个 HookID 上添加一个回调 cont
-  - 如果该 id 上已经有了其它的回调 cont，则把这个 cont 放在最后面
+  - Add a callback cont on the ook this HookID
+  - If there is already another callback cont on the id, put this cont at the end
 
 do_api_callout(TSHttpHookID id)
 
-  - 获取指定 Hook id 的回调 cont，并直接调用 state_api_callout 对 cont 进行回调
-  - 同时设置 Session 的 handleEvent 为 state_api_callout
+  - Get the callback cont of the specified Hook id and call state_api_callout directly to call back cont
+  - Set the sessionEvent of the Session to state_api_callout
 
 state_api_callout(int event, void *edata)
 
-  - 作为 Session 的 handleEvent 方法，用来处理一个 Hook id 绑定了多个 cont 的情况
-  - 当第一个 cont 传回 CONTINUE 事件时，会继续回调下一个 cont
-  - 当所有的 cont 都回调完成时，调用 handle_api_return 继续
+  - as a handleEvent method of the Session, used to handle the case where a Hook id is bound to multiple cont
+  - When the first cont returns a CONTINUE event, it will continue to call back the next cont
+  - Call handle_api_return to continue when all cont callbacks are completed
 
 handle_api_return(int event)
 
-  - 用来实现从特定 Hook id 的 cont 回调之后，返回到 ATS 的流程中
+  - used to return to the ATS process after a cont callback from a specific Hook id
 
-## 从 Hook ID 到 Plugin
+## From Hook ID to Plugin
 
-在ATS中，Hook ID 作为ATS主线流程中的一个路口，可以用来回调 Plugin，然后再返回到这个点，继续运行ATS的主线流程。
+In the ATS, the Hook ID is used as an intersection in the ATS mainline process. It can be used to call back the Plugin, then return to this point and continue to run the ATS mainline process.
 
-有这么一个路口，但是不一定每次都要拐出去，因为可能没有 Plugin 在这个岔路口的末端。
+There is such a junction, but not necessarily every time, because there may be no Plugin at the end of this fork.
 
-那么什么时候能够 / 需要回调 Plugin ？在ATS中，设计了三个层次：
+So when can I/require a callback to Plugin? In the ATS, three levels are designed:
 
-  - 全局（Global Hooks）
-    - 就是一种既定道路，到了这里就一定要回调 Plugin
-    - 通常不区分协议
-  - 会话（Session Hooks）
-    - 也是一种既定道路，到了这里就一定要回调 Plugin
-    - 但是这些Hook点通常是与协议紧密关联的
-  - 事务（Transaction Hooks）
-    - 是一种临时设定的道路，可以认为是基于条件回调 Plugin
-    - 在 Session Hooks 回调 Plugin 之后，在 Plugin 中进行一些条件判断后才会设置是否触发 Hook 对 Plugin 的回调
+  - Global (Hooks)
+    - It’s an established path. When you get here, you must call back to Plugin.
+    - usually does not distinguish between agreements
+  - Session (Hoses)
+    - It’s also an established path. When you get here, you must call back to Plugin.
+    - But these Hook points are usually closely related to the protocol.
+  - Transaction Hooks
+    - Is a temporary set of roads that can be considered a conditional callback based on Plugin
+    - After the Session Hooks callback Plugin, it will set whether to trigger the Hook callback to the Plugin after some conditional judgment in the Plugin.
 
-有的 Hook ID 可以作为“会话”级使用，也可以作为“事务”级使用，因此ATS约定：
+Some Hook IDs can be used as a "session" level or as a "transaction" level, so the ATS convention:
 
-  - 如果一个 Hook ID 可以有多个级别的 Plugin 回调
-  - 那么先调用全局（Global Hooks）
-  - 然后调用会话（Session Hooks）
-  - 最后调用事务（Transaction Hooks）
+  - If a Hook ID can have multiple levels of Plugin callbacks
+  - Then call Global (Global Hooks) first.
+  - Then call the session (Session Hooks)
+  - Last call transaction (Transaction Hooks)
 
-如果一个 Hook ID 上有多个 Plugin 等待回调：
+If there are multiple Plugins on a Hook ID waiting for a callback:
 
-  - 按照各个 Plugin 注册到这个 Hook ID 的顺序进行
-  - 同一个 Hook ID 上等待回调的 Plugin 被放在一个链表里
-  - 通过 ssn_hook_prepend 和 ssn_hook_append 可以在这个链表的 头部 和 尾部 注册新的 Plugin
+  - Follow the order in which each Plugin is registered to this Hook ID
+  - The Plugin waiting for a callback on the same Hook ID is placed in a linked list
+  - Register new Plugin in the header and trailer of this list with ssn_hook_prepend and ssn_hook_append
 
-ATS 定义了三个方法来支持：
+ATS defines three methods to support:
 
-  - Hook ID 的触发 do_api_callout(id)
-  - 对 Plugin 的回调 state_api_callout(event, data)
-  - 从 Plugin 返回到 ATS 的主流程 handle_api_return(id)
+  - Hook ID trigger do_api_callout(id)
+  - Callback state_api_callout(event, data) for Plugin
+  - The main flow handle_api_return(id) returned from Plugin to ATS
 
-这三个方法在 Global，Session 和 Transaction / SM 内都有对应的实现。
+These three methods have corresponding implementations in Global, Session and Transaction / SM.
 
-在 ProxyClientSession 中定义的这一套，三个方法是处于 Global 和 Session 层次的：
+In this set defined in the ProxyClientSession, the three methods are at the Global and Session levels:
 
-  - do_api_callout 发起对指定Hook ID上的plugin函数的调用
-  - 如果没有任何plugin hook在指定的Hook ID上，就直接调用handle_api_return回到ATS的主流程
-  - 否则，通过state_api_callout来实现对plugin函数的回调
+  - do_api_callout initiates a call to the plugin function on the specified Hook ID
+  - If there is no plugin hook on the specified Hook ID, call handle_api_return directly back to the main flow of ATS
+  - Otherwise, callback to the plugin function is implemented via state_api_callout
 
-```
-// 发起对指定Hook ID上的plugin函数的调用
+`` `
+// Initiate a call to the plugin function on the specified Hook ID
 void
 ProxyClientSession::do_api_callout(TSHttpHookID id)
 {
-  // 通过assert来限定只支持HTTP协议的 SSN_START 和 SSN_CLOSE 两个 Hook
-  // 这里实现的并不是特别好，对于希望扩展ATS来支持更多协议的时候，就需要把这里改写到HttpClientSession里面去
+  // Use the assert to limit the SSN_START and SSN_CLOSE two Hooks that only support the HTTP protocol.
+  // The implementation here is not particularly good. When you want to extend ATS to support more protocols, you need to rewrite this to HttpClientSession.
   ink_assert(id == TS_HTTP_SSN_START_HOOK || id == TS_HTTP_SSN_CLOSE_HOOK);
 
-  // 三个与 Plugin 回调相关的变量
-  // api_hookid 用来记录这一次是触发了哪一个hook id的回调
+  // three variables related to the Plugin callback
+  // api_hookid is used to record which callback id is triggered this time.
   this->api_hookid = id;
-  // api_scope 是用来说明这个hook id适用的最高层级，可以看到这里设置为Global
+  // api_scope is used to indicate the highest level to which this hook id applies. You can see that this is set to Global.
   this->api_scope = API_HOOK_SCOPE_GLOBAL;
-  // api_current 是用来表示当前正在回调的 plugin
-  //   plugin 也是一个状态机，需要通过多次回调才能完成
-  //   然后会继续回调当前 hook id 上关联的下一个 plugin
+  // api_current is used to indicate the plugin that is currently being called back
+  // plugin is also a state machine that needs to be completed by multiple callbacks.
+  // will then continue to call back the next plugin associated with the current hook id
   this->api_current = NULL;
 
-  // has_hooks() 的判断是动态的，
-  //   每次从 hook 链表中取走一个 plugin，最后 hook 链表就变为 NULL
+  // The judgment of has_hooks() is dynamic,
+  // Each time a plugin is taken from the hook list, the last hook list becomes NULL
   if (this->hooks_on && this->has_hooks()) {
-    // 切换ProxyClientSession的handler
+    // Switch the ProxyClientSession handler
     SET_HANDLER(&ProxyClientSession::state_api_callout);
-    // 通过state_api_callout来进行首次回调
+    // First callback via state_api_callout
     this->state_api_callout(EVENT_NONE, NULL);
   } else {
-    // 如果这个 Hook ID 上没有 plugin，那么就直接通过 handle_api_return 回到 ATS 的主流程
-    // 这里实现的并不是特别好，对于希望扩展ATS来支持更多协议的时候，就需要把这里改写到HttpClientSession里面去
+    // If there is no plugin on this Hook ID, then go back to the main flow of ATS directly via handle_api_return
+    // The implementation here is not particularly good. When you want to extend ATS to support more protocols, you need to rewrite this to HttpClientSession.
     this->handle_api_return(TS_EVENT_HTTP_CONTINUE);
   }
 }
-```
+`` `
 
-```
-// Hook ID的合法性检查
+`` `
+// Hook ID legality check
 static bool
 is_valid_hook(TSHttpHookID hookid)
 {
   return (hookid >= 0) && (hookid < TS_HTTP_LAST_HOOK);
 }
-```
+`` `
 
-```
-// 实现对plugin函数的回调
+`` `
+// Implement the callback to the plugin function
 int
 ProxyClientSession::state_api_callout(int event, void * /* data ATS_UNUSED */)
 {
   switch (event) {
-  case EVENT_NONE:  // 表示首次触发，此时：
-                    //   this->api_hookid  为触发的Hook ID
-                    //   this->api_scope   为触发的层次：Global, Local, None 分别表示全局、会话、事务但哥级别
-                    //   this->api_current 为NULL，之后将会指向正在执行的plugin回调函数
-  case EVENT_INTERVAL:  // 表示这是直接来自EventSystem的定时回调
-                        // 通常在回调 Plugin 时需要上锁，如果上锁失败，则会安排EventSystem延时重新回调
-  case TS_EVENT_HTTP_CONTINUE:  // 表示这是来自 Plugin 的通知消息，让ATS继续处理这个会话
-                                // 通过 TSHttpSsnReenable 可以向 ClientSession 发送消息
-    // 判断 api_hookid 是否是一个合法有效的Hook ID
+  Case EVENT_NONE: // indicates the first trigger, at this time:
+                    // this->api_hookid is the triggered Hook ID
+                    // this->api_scope is the triggering level: Global, Local, None respectively represent global, session, transaction, but brother level
+                    // this->api_current is NULL, then it will point to the plugin callback function being executed
+  Case EVENT_INTERVAL: // indicates that this is a timed callback directly from EventSystem
+                        // Usually need to lock when calling Plugin, if the lock fails, it will schedule EventSystem delay to callback again.
+  Case TS_EVENT_HTTP_CONTINUE: // indicates that this is a notification message from Plugin, let ATS continue to process this session
+                                // can send messages to ClientSession via TSHttpSsnReenable
+    // Determine if api_hookid is a legally valid Hook ID
     if (likely(is_valid_hook(this->api_hookid))) {
-      // api_current == NULL 表示当前没有正在执行的plugin回调函数
-      // api_scope == GLOBAL 表示需要从全局层级开始查找plugin回调函数的设定
+      // api_current == NULL indicates that there is currently no plugin callback function being executed
+      // api_scope == GLOBAL indicates that you need to find the settings of the plugin callback function from the global level.
       if (this->api_current == NULL && this->api_scope == API_HOOK_SCOPE_GLOBAL) {
-        // 获取 api_hookid 对应的全局层级的 plugin 回调函数
-        // 如果没有找到，那么返回NULL，则api_current == NULL
-        // 这里 http_global_hooks 为全局变量
+        // Get the global level plugin callback function corresponding to api_hookid
+        // If it is not found, then return NULL, then api_current == NULL
+        // here http_global_hooks is a global variable
         this->api_current = http_global_hooks->get(this->api_hookid);
-        // 设置下一个探查层级为会话层级
+        // Set the next probe level to the session level
         this->api_scope = API_HOOK_SCOPE_LOCAL;
       }
 
-      // 如果获取全局层级失败，则 api_current == NULL
-      //     则继续获 api_hookid 对应的取会话层级的 plugin 回调函数
-      // 如果获取全局层级成功，则跳过
+      // If the global level fails, api_current == NULL
+      // Continue to get the session level plugin callback function corresponding to api_hookid
+      // Skip if the global level is successful
       if (this->api_current == NULL && this->api_scope == API_HOOK_SCOPE_LOCAL) {
-        // 获取 api_hookid 对应的会话层级的 plugin 回调函数
-        // 如果没有找到，那么返回NULL，则api_current == NULL
-        // 这里 ssn_hook_get 为成员函数
+        // Get the session level plugin callback function corresponding to api_hookid
+        // If it is not found, then return NULL, then api_current == NULL
+        // where ssn_hook_get is a member function
         this->api_current = ssn_hook_get(this->api_hookid);
-        // 设置下一个探查层级为事务层级
+        // Set the next probe level to the transaction level
         this->api_scope = API_HOOK_SCOPE_NONE;
       }
 
-      // 由于 TS_HTTP_SSN_START_HOOK 和 TS_HTTP_SSN_CLOSE_HOOK 不支持会话层级
-      // 因此这里没有继续判断，获取会话层级的 plugin 回调函数
+      // Since session level is not supported by TS_HTTP_SSN_START_HOOK and TS_HTTP_SSN_CLOSE_HOOK
+      // So there is no further judgment here, to get the session level plugin callback function
 
-      // 如果获取 plugin 回调函数成功，这里可能是 全局 或 会话 层级
+      // If the plugin callback function is successful, it may be global or session level
       if (this->api_current) {
         bool plugin_lock = false;
         APIHook *hook = this->api_current;
-        // 创建自动指针
+        // Create an automatic pointer
         Ptr<ProxyMutex> plugin_mutex;
 
-        // 每一个 plugin 的回调函数都由 Continuation 来封装，因此都会有一个 mutex
-        // 如果这个mutex被正确设置了，则需要对mutex上锁，
-        // 但是，也会存在mutex未设置的情况，此时则跳过上锁过程。
+        // Each plugin's callback function is encapsulated by Continuation, so there will be a mutex
+        // If the mutex is set correctly, you need to lock the mutex.
+        // However, there will also be cases where the mutex is not set, in which case the locking process is skipped.
         if (hook->m_cont->mutex) {
           plugin_mutex = hook->m_cont->mutex;
-          // 对 plugin 的 Cont 尝试上锁
+          // Lock on the plugin's Cont attempt
           plugin_lock = MUTEX_TAKE_TRY_LOCK(hook->m_cont->mutex, mutex->thread_holding);
-          // 上锁失败，则在 10ms 之后重新调用 state_api_callout 重试
+          // Lock failed, then call state_api_callout again after 10ms
           if (!plugin_lock) {
             SET_HANDLER(&ProxyClientSession::state_api_callout);
             mutex->thread_holding->schedule_in(this, HRTIME_MSECONDS(10));
             return 0;
           }
-          // 注意此处没有自动解锁！！
+          // Note that there is no automatic unlocking here! !
         }
 
-        // 如果有多个 plugin 都对同一个Hook ID有兴趣，那么则继续设置该Hook ID对应的下一个 plugin 的回调函数
-        // 如果这是该 Hook ID 在当前层级的最后一个 plugin，那么会返回 NULL
+        // If there are multiple plugins interested in the same hook ID, then continue to set the callback function of the next plugin corresponding to the hook ID.
+        // If this is the last plugin of the Hook ID at the current level, it will return NULL
         this->api_current = this->api_current->next();
-        // 回调 plugin 的 Hook 函数
-        // 对于没有正确设置mutex的情况，不对plugin的mutex上锁，那么直接回调 plugin 难道不会有问题吗？？？
-        // invoke 方法，相当于直接调用了 plugin 里设置的回调函数，通过eventmap数组把Hook ID转换为对应的Event ID
+        // callback plugin's Hook function
+        // For the case where the mutex is not set correctly, do not lock the plugin's mutex, then directly callback plugin is not a problem? ? ?
+        // The invoke method is equivalent to directly calling the callback function set in the plugin, and converting the Hook ID to the corresponding Event ID through the eventmap array.
         hook->invoke(eventmap[this->api_hookid], this);
 
-        // 如果之前成功上锁，这里要显示解锁
+        // If you have successfully locked before, you need to show unlock here.
         if (plugin_lock) {
           Mutex_unlock(plugin_mutex, this_ethread());
         }
 
-        // 成功回调之后，直接返回
-        // 等待 Plugin 调用 TSHttpSsnReenable 方法，此时会重新调用 ClientSession 的 handleEvent()
-        // 而 handleEvent 则指向 state_api_callout
-        // Plugin 会传入两种类型的事件：TS_EVENT_HTTP_CONTINUE 或 TS_EVENT_HTTP_ERROR
-        // 感觉这里设计的也不是特别好，与HTTP协议相关的EVENT，竟然放在了ProxyClientSession的基类里
-        // 这里实际上是返回的 EVENT_DONE = 0
+        // After a successful callback, return directly
+        // Wait for Plugin to call the TSHttpSsnReenable method, which will call the handleEvent() of ClientSession again.
+        // while the handleEvent points to state_api_callout
+        // Plugin will pass in two types of events: TS_EVENT_HTTP_CONTINUE or TS_EVENT_HTTP_ERROR
+        // I feel that the design here is not particularly good. The EVENT related to the HTTP protocol is actually placed in the base class of the ProxyClientSession.
+        // Here is actually the returned EVENT_DONE = 0
         return 0;
       }
     }
 
-    // 如果在 全局 和 会话 级别都没有找到与 Hook ID 关联的 Plugin，则直接通过 handle_api_return 返回到ATS的主流程
+    // If the Plugin associated with the Hook ID is not found at both the global and session levels, then return to the main flow of the ATS directly via handle_api_return
     handle_api_return(event);
     break;
 
-  case TS_EVENT_HTTP_ERROR:  // 表示这是来自 Plugin 的通知消息，通知ATS这个会话出现了错误，需要由ATS终止这个会话
-                             // 通过 TSHttpSsnReenable 可以向 ClientSession 发送消息
-    // 通过将 TS_EVENT_HTTP_ERROR 传递给 handle_api_return 来完成错误处理
+  Case TS_EVENT_HTTP_ERROR: // Indicates that this is a notification message from Plugin, notifying ATS that there is an error in this session and that the session needs to be terminated by ATS.
+                             // can send messages to ClientSession via TSHttpSsnReenable
+    // Complete error handling by passing TS_EVENT_HTTP_ERROR to handle_api_return
     this->handle_api_return(event);
     break;
 
@@ -383,53 +383,53 @@ ProxyClientSession::state_api_callout(int event, void * /* data ATS_UNUSED */)
     ink_assert(false);
   }
 
-  // 这里实际上是返回的 EVENT_DONE = 0
+  // Here is actually the returned EVENT_DONE = 0
   return 0;
 }
-```
+`` `
 
-```
-// 回到ATS的主流程
+`` `
+// Go back to the main process of ATS
 void
 ProxyClientSession::handle_api_return(int event)
 {
-  // 保存当前的 Hook ID
+  // save the current Hook ID
   TSHttpHookID hookid = this->api_hookid;
-  // 设置回调函数为 state_api_callout
-  // 这是一个保护性设置，但是在应用中不会被回调
-  //     如果不幸被回调了，会触发assert
+  // Set the callback function to state_api_callout
+  // This is a protective setting, but will not be called back in the app.
+  // If it is unfortunately called back, it will trigger assert
   SET_HANDLER(&ProxyClientSession::state_api_callout);
 
-  // 重置 ClientSession 的 Hook 状态
+  // Reset the Hook status of ClientSession
   this->api_hookid = TS_HTTP_LAST_HOOK;
   this->api_scope = API_HOOK_SCOPE_NONE;
   this->api_current = NULL;
 
-  // 根据之前保存的 Hook ID 来执行对应的操作
+  // Perform the corresponding operation based on the previously saved Hook ID
   switch (hookid) {
   case TS_HTTP_SSN_START_HOOK:
-    // 如果 Hook ID 是 SSN START
+    // If the Hook ID is SSN START
     if (event == TS_EVENT_HTTP_ERROR) {
-      // 如果之前通过 TSHttpSsnReenable 传递的是 ERROR，则执行关闭ClientSession的操作
+      // If you passed ERROR before TSHttpSsnReenable, execute the operation to close ClientSession
       this->do_io_close();
     } else {
-      // 如果是 CONTINUE，则开始一个事务
+      // If it is CONTINUE, start a transaction
       this->start();
     }
     break;
   case TS_HTTP_SSN_CLOSE_HOOK: {
-    // 如果 Hook ID 是 SSN CLOSE
+    // If the Hook ID is SSN CLOSE
     NetVConnection *vc = this->get_netvc();
     if (vc) {
-      // 由于是 SSN CLOSE HOOK，无论出现任何错误，都是要关闭ClientSession的，所以就不需要对 event 进行判断了
-      // 关闭 netvc
+      // Since it is SSN CLOSE HOOK, the ClientSession is closed regardless of any errors, so there is no need to judge the event.
+      // close netvc
       vc->do_io_close();
-      // 把保存了 netvc 的成员变量设置为 NULL
+      // set the member variable holding netvc to NULL
       this->release_netvc();
     }
-    // 首先，释放继承类的成员对象
-    // 然后，释放 ProxyClientSession 的 api_hooks 和 mutex
-    // 最后，回收 ClientSession 对象的内存
+    // First, release the member object of the inherited class
+    // Then, release the api_hooks and mutex of the ProxyClientSession
+    // Finally, reclaim the memory of the ClientSession object
     this->destroy();
     break;
   }
@@ -438,24 +438,24 @@ ProxyClientSession::handle_api_return(int event)
     break;
   }
 }
-```
-可以看到在ProxyClientSession这个基类里只实现了对SSN START和SSN CLOSE两个Hook点返回到ATS主流程之后的处理。
+`` `
+It can be seen that in the base class of ProxyClientSession, only the processing of returning the two Hook points of SSN START and SSN CLOSE to the ATS main flow is realized.
 
-但是在 SSN START 遇到错误关闭 ClientSession 时，与 SSN CLOSE 之后关闭 ClientSession 的代码又完全不一样，这是为什么？
+But when SSN START encounters an error and closes ClientSession, the code to close ClientSession after SSN CLOSE is completely different. Why?
 
-  - 在调用 this->do_io_close() 之后，仍然需要触发 SSN CLOSE Hook
-  - 在 SSN CLOSE Hook 之后，直接关闭NetVC，并释放 ClientSession 的资源就可以了
+  - After calling this->do_io_close(), you still need to trigger SSN CLOSE Hook
+  - After SSN CLOSE Hook, directly close NetVC and release the resources of ClientSession.
 
-所以：
+and so:
 
-  - this->do_io_close() 被设计用来
-    - 执行对 ClientSession 的关闭，只是设置状态为关闭，但是不回收任何资源
-    - 然后触发 SSN CLOSE Hook
-  - 由 Plugin 返回后，来到 handle_api_return 的 SSN CLOSE Hook 的处理点
-    - 在这里才是最后关闭 NetVC
-    - 然后回收 ClientSession 的资源
+  - this->do_io_close() is designed to be used
+    - Perform a shutdown of ClientSession, just set the state to off, but do not recycle any resources
+    - Then trigger SSN CLOSE Hook
+  - After returning from Plugin, come to the processing point of SSN CLOSE Hook of handle_api_return
+    - Here is the last time to close NetVC
+    - then reclaim the resources of the ClientSession
 
-## 与 SessionAccept 的关系
+## Relationship with SessionAccept
 
 XxxSessionAccept::accept()
 
@@ -470,16 +470,16 @@ XxxClientSession::new_connection()
 
 XxxClientSession::start()
 
-  - 开始事务处理
-  - Http 协议相对简单，在 start() 中调用 new_transaction()
-  - H2 协议相对复杂，需要做更多的操作，则未定义 new_transaction()
+  - Start transaction processing
+  - The Http protocol is relatively simple, calling new_transaction() in start()
+  - The H2 protocol is relatively complex and requires more operations. New_transaction() is not defined.
 
-XxxxSessionAccept 通常用来创建 XxxxClientSession，例如：
+XxxxSessionAccept is usually used to create XxxxClientSession, for example:
 
-  - HttpSessionAccept 创建 HttpClientSession
-  - Http2SessionAccept 创建 Http2ClientSession
+  - HttpSessionAccept creates HttpClientSession
+  - Http2SessionAccept creates Http2ClientSession
 
-## 参考资料
+## References
 
 - [ProxyClientSession.h](http://github.com/apache/trafficserver/tree/master/proxy/ProxyClientSession.h)
 - [ProxyClientSession.cc](http://github.com/apache/trafficserver/tree/master/proxy/ProxyClientSession.cc)
