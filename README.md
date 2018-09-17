@@ -1,63 +1,63 @@
-# 权利保留
+# Right retention
 
-对本项目内容的任何转发和引用，请注明本项目地址：http://github.com/oknet/atsinternals
+For any forwarding and citation of the content of this project, please indicate the address of this project: http://github.com/oknet/atsinternals
 
-# Apache Traffic Server 源代码分析
+# Apache Traffic Server Source Code Analysis
 
-本项目主要是我对Apache Traffic Server 6.0（以下简称ATS）源代码的分析结果。
+This project is mainly the analysis result of my source code of Apache Traffic Server 6.0 (hereinafter referred to as ATS).
 
-是我对其内部实现，架构设计的个人认识，受限于个人能力，可能有理解、分析不到位的情况。
+It is my personal understanding of its internal implementation and architectural design, which is limited by personal ability and may be understood and analyzed.
 
-部分内容是直接将ATS源码中的注释直接翻译过来的，可能有些不通顺，可以对照源码理解阅读。
+Part of the content is directly translated from the comments in the ATS source code, may be somewhat fluent, can be read and understood against the source code.
 
-由于 ATS 6.0 的变化比较大，所以如果您在使用/参照的源代码不是6.0版本，请翻阅官方git仓库中的源代码变化，以帮助理解。
+Due to the large changes in ATS 6.0, if the source code you are using/referencing is not version 6.0, please read the source code changes in the official git repository to help understand.
 
-# 联系作者
+# Contact author
 
-如果对内容有不理解，或者认为有错误，可以在github直接留言给我。
+If you don't understand the content, or think it is wrong, you can leave a message to me directly on github.
 
-# 源代码目录结构
+# Source code directory structure
 
-ATS的源代码由多个部分构成，分别设立独立的目录以区分：
+The source code of ATS consists of multiple parts, each with a separate directory to distinguish:
 
   - iocore
-    - 实现各种底层的I/O交互
-    - 包含了多个子系统（subsystem）
+    - Implement various underlying I/O interactions
+    - Contains multiple subsystems
   - proxy
 
 ## IOCORE
 
-在IOCore内包含了多个子系统，每个子系统使用独立的目录来区隔：
+There are multiple subsystems within IOCore, each subsystem is separated by a separate directory:
 
   - EventSystem
-    - 提供基本的事件系统，用以实现延续（Continuation）编程模式的基础组件
+    - Provides a basic event system to implement the basic components of the Continuation programming model
   - Net
-    - 提供基本的网络操作，TCP，UDP，OOB，Polling等网络I/O操作
+    - Provide basic network operations, TCP, UDP, OOB, Polling and other network I / O operations
   - DNS
-    - 提供DNS解析服务
+    - Provide DNS resolution service
   - HostDB
-    - 提供DNS解析结果的缓存／查询服务 
+    - Cache/query service that provides DNS resolution results 
   - AIO
-    - 提供磁盘I/O操作 
+    - Provide disk I / O operations 
   - Cache
-    - 提供缓存服务 
+    - Provide caching service 
   - Cluster
-    - 提供集群服务 
+    - Provide cluster services 
 
-另外 Utils 目录是公共部分，不是一个子系统。
+In addition, the Utils directory is a public part, not a subsystem.
 
-在每个子系统内，有两种类型的头文件前缀：
+Within each subsystem, there are two types of header file prefixes:
 
-  - I_xxxx.h
-    - 对外提供接口的定义，I表示Interface
-    - 可以 include I_xxxx.h，但是不可以 include P_xxxx.h
-  - P_xxxx.h
-    - 在子系统内部使用的定义，P表示Private
-    - 可以 include I_xxxx.h，也可以 include P_xxxx.h
+  - I\_xxxx.h
+    - Provide external interface definition, I means Interface
+    - Can include I\_xxxx.h, but can't include P\_xxxx.h
+  - P\_xxxx.h
+    - the definition used inside the subsystem, P means Private
+    - Can include I\_xxxx.h or include P\_xxxx.h
 
-### EventSystem子系统
+### EventSystem Subsystem
 
-主要包含Interface基础类型的定义：
+Mainly contains the definition of the Interface base type:
 
   - Continuation
   - Action
@@ -71,18 +71,18 @@ ATS的源代码由多个部分构成，分别设立独立的目录以区分：
   - MIOBufferAccessor
   - VIO
 
-主要包含Interface扩展类型的定义
+Mainly contains the definition of the Interface extension type
 
   - VConnection <- Continuation
   - Event <- Action
   - EThread <- Thread
   - EventProcessor <- Processor
 
-可以看到EventSystem子系统基本上都是Interface类型的定义，这是因为它是延续（Continuation）编程模式的基础组件。
+It can be seen that the EventSystem subsystem is basically a definition of the Interface type, because it is the basic component of the Continuation programming mode.
 
-### Net子系统
+### Net Subsystem
 
-主要包含Interface定义：
+Mainly contains the Interface definition:
 
   - NetVCOptions
   - NetVConnection <- VConnection
@@ -92,7 +92,7 @@ ATS的源代码由多个部分构成，分别设立独立的目录以区分：
   - UDPPacket
   - UDPNetProcessor <- Processor
 
-主要包含Private基础定义：
+Mainly contains the basic definition of Private:
 
   - PollDescriptor
   - PollCont <- Continuation
@@ -100,14 +100,14 @@ ATS的源代码由多个部分构成，分别设立独立的目录以区分：
   - Server <- Connection
   - NetState
 
-TCP 相关：
+TCP related:
 
   - UnixNetVConnection <- NetVConnection
   - NetHandler <- Continuation
   - NetAccept <- Continuation
   - UnixNetProcessor <- NetProcessor
 
-SSL 相关：
+SSL related:
 
   - SSLNetVConnection <- UnixNetVConnection
   - SSLNetAccept <- NetAccept
@@ -117,11 +117,11 @@ SSL 相关：
   - SSLNextProtocolTrampoline <- Continuation
   - SSLNextProtocolSet
 
-Socks 相关：
+Socks related:
 
   - SocksEntry <- Continuation
 
-UDP 相关：
+UDP related:
 
   - UDPIOEvent <- Event
   - UDPConnectionInternal <- UDPConnection
@@ -131,52 +131,52 @@ UDP 相关：
   - UDPQueue
   - UDPNetHandler <- Continuation
 
-可以看到Net子系统已经开始区分Interface和Private类型的定义了，对于Private类型的定义，应该仅仅在Net子系统内部直接使用。
+It can be seen that the Net subsystem has begun to distinguish between the definition of the Interface and Private types. For the definition of the Private type, it should be used directly only within the Net subsystem.
 
-注意：由于ATS的代码由社区的许多开发者功能开发，因此在编写代码时可能打破了上面这种逻辑，所以在阅读代码时不必过于纠结。
+Note: Since the ATS code is developed by many of the community's developer features, it may break the logic above when writing code, so don't worry too much when reading the code.
 
-#### NetVConnection的继承关系
+#### NetVConnection inheritance relationship
 
-早期，这非常的久远，作为ATS开源的前身，Inktomi Cache Server 是支持Windows操作系统的，从现在ATS的代码里仍然能看到一些被注释掉的代码，使用的一些类的名字以NT开头，而且可以找到与其对应的以Unix开头的类定义。
+In the early days, this is very long. As the predecessor of ATS open source, Inktomi Cache Server supports Windows operating system. From the current ATS code, you can still see some commented out code. Some of the classes used start with NT. And you can find the corresponding class definition that starts with Unix.
 
-因此对于 NetVConnection 的继承类 UnixNetVConnection：
+So for the NetVConnection inheritance class UnixNetVConnection:
 
-  - 可以大胆猜测存在 NTNetVConnection 也是 NetVConnection 的继承类
-  - 然后我们看到，NetVConnection的定义是出现在I_NetVConnection.h中的，所以NetVConnection是对外提供的Interface
-  - 而UnixNetVConnection的定义是出现在P_UnixNetVConnection.h中的，所以UnixNetVConnection则是只在Net子系统内使用
-  - 然后再看所有头文件名称内包含Unix关键字的，都是以P\_开头的
+  - Can be boldly guessing that NTNetVConnection is also an inheritance class of NetVConnection
+  - Then we see that the definition of NetVConnection is in I_NetVConnection.h, so NetVConnection is an externally provided Interface.
+  - The definition of UnixNetVConnection appears in P_UnixNetVConnection.h, so UnixNetVConnection is only used within the Net subsystem.
+  - Then look at all the header files containing Unix keywords, all starting with P\_
 
-因此我们可以得出下面的结论：
+So we can draw the following conclusions:
 
-  - NetVConnection 是Net子系统对外部提供的Interface，所有可以供外部调用的方法都需要放在其中以虚方法来定义
-  - UnixNetVConnection 和 NTNetVConnection 则在不同的平台，使用不同的实现方式，重新定义基类NetVConnection的虚方法
-  - 以此来实现NetVConnection对多操作系统平台的支持
-  - 而外部系统无需关心NetVConnection的具体底层实现是UnixNetVConnection还是NTNetVConnection
+  - NetVConnection is an interface provided by the Net subsystem to the outside. All methods that can be called externally need to be placed in a virtual method.
+  - UnixNetVConnection and NTNetVConnection redefine the virtual method of the base class NetVConnection on different platforms, using different implementations
+  - To achieve NetVConnection support for multiple operating system platforms
+  - The external system does not need to care about the specific underlying implementation of NetVConnection is UnixNetVConnection or NTNetVConnection
 
 
-建立在对上述继承关系的理解之上，然后再来看一下SSLNetVConnection：
+Based on the understanding of the above inheritance relationship, then look at the SSLNetVConnection:
 
-  - SSLNetVConnection是继承自UnixNetVConnection的
-  - SSLNetVConnection的定义没有包含Unix或NT关键字
-  - 实现SSLNetVConnection的 *.h 和 *.cc 文件名也没有包含Unix或NT关键字
-  - 但是所有头文件名称内包含SSL关键字的，都是以P\_开头的
+  - SSLNetVConnection is inherited from UnixNetVConnection
+  - The definition of SSLNetVConnection does not contain Unix or NT keywords
+  - *.h and *.cc file names that implement SSLNetVConnection also do not contain Unix or NT keywords
+  - But all header file names that contain the SSL keyword start with P\_
 
-可以大胆猜测SSLNetVConnection的实现是通过宏定义来区分的：
+You can boldly guess that the implementation of SSLNetVConnection is distinguished by macro definitions:
 
-  - 在Unix操作系统，SSLNetVConnection继承自UnixNetVConnection
-  - 在WinNT操作系统，SSLNetVConnection继承自NTNetVConnection
+  - On Unix operating systems, SSLNetVConnection inherits from UnixNetVConnection
+  - In WinNT operating system, SSLNetVConnection inherits from NTNetVConnection
 
-但是后来NT部分的代码被砍掉了，所以现在看到的继承关系就是：
+But then the NT part of the code was cut off, so the inheritance relationship I see now is:
 
   - NetVConnection
     - UnixNetVConnection
       - SSLNetVConnection
 
-但是在实现中，并未提供一个方法，让Net子系统的用户能够知道一个NetVConnection具体是什么类型，因此在proxy目录中看到大量的代码直接引用了UnixNetVConnection和SSLNetVConnection类型的动态转换来判断一个NetVConnection是什么类型。
+However, in the implementation, there is no way to let the users of the Net subsystem know what type of NetVConnection is, so a large amount of code in the proxy directory directly refers to the dynamic conversion of UnixNetVConnection and SSLNetVConnection types to determine a NetVConnection. What type is it.
 
-由于SSL层的实现是建立在使用OpenSSL库的基础上，而且在实际的业务逻辑实现的时候，同样要设置一些SSL的属性，因此SSLNetVConnection需要提供一些Interface给Net子系统的用户，但是SSLNetVConnection的这些方法并没有在NetVConnection中进行定义，这里大概是因为SSLNetVConnection与NetVConnection中间还隔着UnixNetVConnection，有些不方便，而又有一些丑陋吧。
+Since the implementation of the SSL layer is based on the use of the OpenSSL library, and when the actual business logic is implemented, some SSL attributes must be set. Therefore, SSLNetVConnection needs to provide some interfaces to the users of the Net subsystem, but these are SSLNetVConnection. The method is not defined in NetVConnection. This is probably because there is a UnixNetVConnection between SSLNetVConnection and NetVConnection. Some are inconvenient, but there are some ugliness.
 
-因此，Net子系统的用户在使用SSL相关的功能时，都需要将NetVConnection动态转换为SSLNetVConnection类型才可以进行调用，这些都打破了原有系统的良好设计。
+Therefore, users of the Net subsystem need to dynamically convert the NetVConnection to the SSLNetVConnection type when using SSL-related functions, which breaks the good design of the original system.
 
-注：上述分析由于包含大量猜测，只是本人个人理解。
+Note: The above analysis is only personally understood because it contains a lot of guesses.
 
