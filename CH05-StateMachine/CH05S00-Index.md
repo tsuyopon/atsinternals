@@ -1,83 +1,83 @@
-# 状态机
+# state machine
 
-本章开始介绍的状态机实际上是特指连接了ClientVC和ServerVC的状态机。
+The state machine introduced in this chapter is actually a state machine that connects ClientVC and ServerVC.
 
-前面介绍过的“蹦床”、“ClientSession”，实际上已经是一个状态机了，能够处理一些事件，但是这些状态机只能够处理来自一个VConnection的事件。
+The "boring machine" and "ClientSession" introduced earlier are actually a state machine that can handle some events, but these state machines can only handle events from a VConnection.
 
-本章将开始介绍用于实现代理功能的状态机，该状态机将会：
+This chapter will begin with a description of the state machine used to implement the proxy function, which will:
 
-  - 连接多个VConnection
-  - 接收来自这些VConnection的事件
-  - 在这些VConnection之间传递数据
+  - Connect multiple VConnections
+  - Receive events from these VConnections
+  - Pass data between these VConnections
 
-对于两个 VConnection 之间的数据通信，可以分成：
+For data communication between two VConnections, it can be divided into:
 
-  - 单向（OneWayTunnel）
-    - 从一个VC读取数据然后通过另一个VC发送数据
-  - 双向（TwoWayTunnel）
-    - 从一个VC读取数据然后通过另一个VC发送数据
-    - 同时相反方向的数据传递
-    - 相当于把两个单向组合在一起
+  - One way (OneWayTunnel)
+    - read data from one VC and then send data through another VC
+  - Two-way (TwoWayTunnel)
+    - read data from one VC and then send data through another VC
+    - simultaneous data transfer in the opposite direction
+    - Equivalent to combining two one-way
 
-对于多个 VConnection 之间的数据通信，ATS可以实现：
+For data communication between multiple VConnections, ATS can implement:
 
-  - 单向多出（OneWayMultiTunnel）
-    - 从一个VC读取数据，然后向多个VC同时发送数据
-    - 而且可以兼顾多个目标VC对数据消费速度的快慢不同
+  - One-way multi-out (OneWayMultiTunnel)
+    - Read data from one VC and then send data to multiple VCs simultaneously
+    - And can take into account the speed of data consumption of multiple target VCs
  
-对于单纯实现数据传递来说，上面所描述的三种状态机已经足够了，但是有的时候我们要做一些更细致的设计来满足业务需要，例如：
+For the simple implementation of data transfer, the three state machines described above are sufficient, but sometimes we have to do some more detailed design to meet business needs, such as:
 
-  - 对接收到的数据进行验证后，才发送给目标VC
-    - 如果验证失败，还要通知来源VC数据有错误，需要重新发送
-    - 如果验证成功，要通知来源VC数据正在处理，请等待
-  - 对目标VC返回的数据进行拆分，因为可能返回多个结果
-    - 把拆分后的结果分别发给对应的来源VC
+  - After the received data is verified, it is sent to the target VC.
+    - If the verification fails, the source VC data is also notified that there is an error and needs to be resent
+    - If the verification is successful, please inform the source VC data is being processed, please wait
+  - Split the data returned by the target VC, as multiple results may be returned
+    - Send the split results to the corresponding source VC
 
-这个时候就不是简单的只实现数据传递工作，所以一个能够满足业务需求的状态机的架构应该是这样的：
+At this time, it is not simple to implement data transfer only, so the architecture of a state machine that can meet the business needs should be like this:
 
 ```
-                +----------+------------------------------+----------+
-                |          |                              |          |
---------------> |          +===>>=== OneWayTunnel ===>>===+          | -------------->
-                |          |                              |          |
-                | ClientVC |         StateMachine         | ServerVC |
-                |          |                              |          |
-<-------------- |          +===<<=== OneWayTunnel ===<<===+          | <--------------
-                |          |                              |          |
-                +----------+------------------------------+----------+
+                +----------+------------------------------+------- ---+
+                | | | |
+--------------> | +===>>=== OneWayTunnel ===>>===+ | -------------- >
+                | | | |
+                ClientVC | StateMachine | ServerVC |
+                | | | |
+<-------------- | +===<<=== OneWayTunnel ===<<===+ | <------------- -
+                | | | |
+                +----------+------------------------------+------- ---+
 ```
 
-实现业务功能的状态机对OneWayTunnel进行控制：
+The state machine that implements the business function controls the OneWayTunnel:
 
-  - 在需要解析业务的时候，由状态机负责管理ClientVC和ServerVC
-  - 在需要直接传递数据的时候，状态机把管理权交给OneWayTunnel，等数据传递完成后，再立即交还给状态机
-  - Tunnel就像是状态机的一个助手，可以完成一些简单轻松的工作
+  - The state machine is responsible for managing ClientVC and ServerVC when it needs to parse the business.
+  - When the data needs to be transferred directly, the state machine hands over the management to OneWayTunnel, and when the data transfer is completed, it is returned to the state machine.
+  - Tunnel is like an assistant to the state machine, it can do some simple and easy work.
 
-那么，作为状态机是如何同时接收并处理来自两个VC的事件呢？
+So, how does the state machine receive and process events from both VCs simultaneously?
 
   - OneWayTunnel
-    - ClientVC 与 ServerVC 共享同一个IOBuffer
-    - 因此谁先拿到OneWayTunnel状态机的锁，谁就可以操作这个IOBuffer
-    - ClientVC负责向IOBuffer写入数据，ServerVC总是从IOBuffer消费数据
-    - 任何一方如果拿不到锁就等下一次
-    - 如果IOBuffer写满了，就通知ServerVC赶紧消费
-    - 如果IOBuffer读空了，就通知ClientVC赶紧生产
-    - ClientVC收到了 EOS 事件，仍然需要把IOBuffer里剩余的数据写入ServerVC
-    - ServerVC收到了 EOS 事件，整个Tunnel就终止了
+    - ClientVC shares the same IOBuffer with ServerVC
+    - So whoever gets the lock of the OneWayTunnel state machine, who can operate this IOBuffer
+    - ClientVC is responsible for writing data to IOBuffer, ServerVC always consumes data from IOBuffer
+    - If any party can't get the lock, wait for the next time.
+    - If the IOBuffer is full, notify ServerVC to hurry to spend
+    - If the IOBuffer is read empty, notify ClientVC to hurry to produce
+    - ClientVC received the EOS event and still needs to write the remaining data in IOBuffer to ServerVC.
+    - ServerVC received the EOS event and the entire tunnel was terminated.
   - TwoWayTunnel
-    - 把两个OneWayTunnel组合在一起
-    - 其中一个OneWayTunnel终止，那么也要通知另外一个OneWayTunnel终止。
+    - Combine two OneWayTunnel
+    - If one of the OneWayTunnels is terminated, then another OneWayTunnel should be notified to terminate.
   - OneWayMultiTunnel
-    - 基本与OneWayTunnel一样
-    - TargetVC收到 EOS 事件时，只会将一个TargetVC关闭
-    - 只有全部TargetVC都关闭了，整个Tunnel才会终止
-    - ClientVC收到 EOS 事件时，仍然需要将IOBuffer里剩余的数据写入所有存活的TargetVC
+    - Basically the same as OneWayTunnel
+    - When TargetVC receives an EOS event, only one TargetVC will be closed.
+    - Only the entire TargetVC is closed and the entire tunnel will be terminated
+    - When ClientVC receives an EOS event, it still needs to write the remaining data in the IOBuffer to all surviving TargetVCs.
 
-可以看到对于Tunnel来说，由于所有的VC都回调同一个状态机，共享状态机内的同一个IOBuffer，所以整个流程不会出现问题，即使ClientVC与ServerVC不在同一个线程里。
+It can be seen that for the Tunnel, since all VCs call back the same state machine and share the same IOBuffer in the state machine, there is no problem in the whole process, even if ClientVC and ServerVC are not in the same thread.
 
-对于实现复杂业务的状态机，最关键的一点就是在收到来自ClientVC的回调时，如何安全的操作ServerVC
+For the state machine that implements complex services, the most important point is how to safely operate ServerVC when receiving callbacks from ClientVC.
 
-  - 调用 server_vc->reenable() 是安全的
-  - 其它任何操作都需要对 server_vc->mutex 上锁
+  - Calling server_vc->reenable() is safe
+  - Any other operations need to lock server_vc->mutex
 
-同样的，在收到ServerVC的回调时，操作ClientVC也要遵循以上原则。
+Similarly, when receiving a callback from ServerVC, the operation of ClientVC also follows the above principles.

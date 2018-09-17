@@ -1,173 +1,173 @@
-# 新特性 / 功能：Socks
+# New Features / Function: Socks
 
-下面将要介绍的是 Socks 功能，Socks 功能包含了：
+The Socks feature is described below, and the Socks feature includes:
 
 - Socks Proxy
-  - 它是ATS里设计最简单的一个代理功能，它利用到了 OneWayTunnel 和 TwoWayTunnel
-  - 它使得ATS可以对Socks Client的请求进行解析
-  - 我们可以通过对 Socks Proxy 代码的分析，学习如何使用 Tunnel 状态机。
+  - It is the easiest proxy feature in ATS, it takes advantage of OneWayTunnel and TwoWayTunnel
+  - It allows ATS to parse requests from Socks Client
+  - We can learn how to use the Tunnel state machine by analyzing the Socks Proxy code.
 - Socks Parent
-  - 它允许ATS通过Socks代理服务器对源服务器发起访问
-  - 它使得ATS可以作为Socks Client
+  - It allows ATS to initiate access to the source server through the Socks proxy server
+  - It makes ATS available as a Socks Client
 
 ## SOCKS_WITH_TS
 
-首先，介绍一个宏定义 SOCKS_WITH_TS，它在 I_Socks.h 中进行了定义，在 Socks 代码中会有大量的地方判断这个宏是否定义，以应用不同的代码设计。
-定义了这个宏之后，会有一些增强的新特性，因此，在后面进行代码分析的时候，我们就按照具有新特性的代码进行全面的分析。
+First, introduce a macro definition SOCKS_WITH_TS, which is defined in I_Socks.h. There are a lot of places in the Socks code to determine whether this macro is defined to apply different code designs.
+After defining this macro, there will be some new enhancements, so when we do code analysis later, we will perform a comprehensive analysis based on the code with new features.
 ```
-source: I_Socks.h
+Source: I_Socks.h
 /*When this is being compiled with TS, we enable more features the use
-  non modularized stuff. namely:
-  ip_ranges and multiple socks server support.
+  Non modularized stuff.
+  Ip_ranges and multiple socks server support.
 */
 #define SOCKS_WITH_TS
 ```
 ## socks_conf_struct
 
-接着，介绍一个结构，该结构存储了 Socks 功能的全局配置项。
+Next, we'll look at a structure that stores the global configuration items for the Socks feature.
 
 ```
-source: P_Socks.h
-struct socks_conf_struct {
-  // 下面这些配置项是用来服务Socks Parent功能的
-  int socks_needed;                   // true: 所有ATS对源服务器发起的连接都需要通过Socks代理服务器
-                                      //   该配置也是整个 Socks 功能的总开关
-  int server_connect_timeout;         // 连接Socks代理服务器的超时时间
-  int socks_timeout;                  // 与Socks代理服务器建立连接后的通信超时时间
-  unsigned char default_version;      // 与Socks代理服务器进行通信时，默认采用的Socks协议版本
-  char *user_name_n_passwd;           // 指向 用户名 和 密码 的指针：[len(short int)] + "用户名" + [len(short int)] + "密码"
-  int user_name_n_passwd_len;         // 用户名和密码的字节数＋2 bytes
+Source: P_Socks.h
+Struct socks_conf_struct {
+  // The following configuration items are used to serve the Socks Parent function.
+  Int socks_needed; // true: all ATS connections to the origin server need to pass through the Socks proxy server
+                                      // This configuration is also the main switch for the entire Socks function
+  Int server_connect_timeout; // timeout for connecting to the Socks proxy server
+  Int socks_timeout; // communication timeout after establishing a connection with the Socks proxy server
+  Unsigned char default_version; // The Socks protocol version used by default when communicating with the Socks proxy server
+  Char *user_name_n_passwd; // Pointer to username and password: [len(short int)] + "username" + [len(short int)] + "password"
+  Int user_name_n_passwd_len; // Bytes of username and password +2 bytes
 
-  int per_server_connection_attempts; // 当指定了多个Socks代理服务器时，对于每一个Socks代理服务器尝试重连的次数
-  int connection_attempts;            // 总尝试次数
+  Int per_server_connection_attempts; // The number of attempts to reconnect for each Socks proxy server when multiple Socks proxy servers are specified
+  Int connection_attempts; // total number of attempts
 
   // the following ports are used by SocksProxy
-  // 下面这些配置项是用来服务Socks Proxy功能的
-  int accept_enabled;       // true：开启对Socks Client请求的解析功能
-                            //   要求 socks_needed 必须为 true，否则解析出来的 Socks 请求，没办法发送给Socks代理服务器
-  int accept_port;          // 对来自指定端口的Socks Client的请求进行解析
-                            //   在开启 accept_enabled 之后，必需设置一个服务端口用来接收 Socks 请求
-  unsigned short http_port; // 如果Socks Client的请求为CONNECT，并且目标端口为指定端口，则将该请求转入 HttpSM 进行处理
+  // The following configuration items are used to serve the Socks Proxy feature.
+  Int accept_enabled; // true: enable parsing of Socks Client requests
+                            // Ask socks_needed to be true, otherwise the resolved Socks request can't be sent to the Socks proxy server.
+  Int accept_port; // Parse the request from the Socks Client on the specified port
+                            // After enabling accept_enabled, you must set up a service port to receive Socks requests.
+  Unsigned short http_port; // If the Socks Client request is CONNECT and the destination port is the specified port, then the request is forwarded to HttpSM for processing.
 
-  IpMap ip_map;             // 当 socks_needed == true 时，这个表里包含的 目标IP地址 将不通过 Socks代理服务器
+  IpMap ip_map; // When socks_needed == true, the target IP address contained in this table will not pass through the Socks proxy server.
 
-  socks_conf_struct()                    // 配置文件缺省值为
-    : socks_needed(0),                   // false(0)（必需项，true＝最小配置项）
-      server_connect_timeout(0),         // 10 秒
-      socks_timeout(100),                // 100 秒
-      default_version(5),                // Version 4
-      user_name_n_passwd(NULL),          // NULL (非必需项)
-      user_name_n_passwd_len(0),         // 0 (非必需项)
-      per_server_connection_attempts(1), // 1
-      connection_attempts(0),            // 4
-      accept_enabled(0),                 // false(0)（必需项，true＝最小配置项）
-      accept_port(0),                    // 1080
-      http_port(1080)                    // 80，这里是一个小bug，不过没关系，在配置文件加载时缺省值是正确的。
+  Socks_conf_struct() // configuration file default
+    : socks_needed(0), // false(0) (required, true=minimum configuration item)
+      Server_connect_timeout(0), // 10 seconds
+      Socks_timeout(100), // 100 seconds
+      Default_version(5), // Version 4
+      User_name_n_passwd(NULL), // NULL (non-required)
+      User_name_n_passwd_len(0), // 0 (non-required)
+      Per_server_connection_attempts(1), // 1
+      Connection_attempts(0), // 4
+      Accept_enabled(0), // false(0) (required, true=minimum configuration item)
+      Accept_port(0), // 1080
+      Http_port(1080) // 80, here is a small bug, but it doesn't matter, the default value is correct when the configuration file is loaded.
   {
   }
 };
 ```
 
-## 配置 Socks
+## Configuring Socks
 
-ATS 中对于Socks功能的配置资料较少，现整理如下：
+There are few configuration files for the Socks function in ATS.
 
-- 首先，配置缺省的Socks Server，多个Socks Server之间通过分号分隔。
+- First, configure the default Socks Server, separated by semicolons between multiple Socks Servers.
 
 ```
-CONFIG proxy.config.socks.default_servers STRING "x.x.x.x:1080;x.x.x.x:1080"
+CONFIG proxy.config.socks.default_servers STRING "xxxx:1080;xxxx:1080"
 ```
 
-- 然后，开启 ATS 的Socks Proxy功能，这样ATS就可以利用Socks Server来访问源服务器
+- Then, enable ATS's Socks Proxy function so that ATS can use Socks Server to access the source server.
 
 ```
 CONFIG proxy.config.socks.socks_needed INT 1
 ```
 
-- 如果希望 ATS 可以将Socks请求中的HTTP请求过滤出来，并对这些HTTP请求进行服务
+- If you want ATS to filter out HTTP requests in Socks requests and serve them
 
 ```
 CONFIG proxy.config.socks.accept_enabled INT 1
 ```
 
-- 另外还有部分socks规则需要配置，可通过配置项指定默认的 socks.config 的文件名
+- There are also some socks rules that need to be configured. You can specify the default filename of the socks.config through the configuration item.
 
 ```
 CONFIG proxy.config.socks.socks_config_file STRING socks.config
 ```
 
-- 在 socks.config 中主要对以下三个功能进行配置：
-  - 连接 Socks 5 代理服务器时需要的用户名及密码
-  - 不使用 Socks 代理服务器的目标IP （Socks 例外）
-  - 为不同的目标IP指定不同的Socks代理服务器（Socks规则）
+- Mainly configure the following three functions in socks.config:
+  - Username and password required to connect to the Socks 5 proxy server
+  - Do not use the target IP of the Socks proxy server (Socks exception)
+  - Specify different Socks proxy servers for different target IPs (Socks rules)
 
-### 关于 accept_enabled
+### About accept_enabled
 
-在开启 accept_enabled 之后，ATS作为Socks Server的前置代理，要求客户端将ATS作为Socks Server，所有的Socks请求首先发给 ATS，ATS将目标端口为 80 的连接转入 HttpSessionAccept 来处理。
-如需修改缺省的HTTP端口（80）：
+After accept_enabled, ATS acts as the pre-agent of Socks Server, requiring the client to use ATS as Socks Server. All Socks requests are sent to ATS first. ATS transfers the connection with destination port 80 to HttpSessionAccept for processing.
+To modify the default HTTP port (80):
 
 ```
 CONFIG proxy.config.socks.http_port INT 80
 ```
 
-### 关于 socks_needed
+### About socks_needed
 
-在开启 socks_needed 之后，ATS对外发起的请求，将可能会通过Socks Server代理
+After opening socks_needed, the ATS external request will probably pass the Socks Server proxy.
 
-- 如果在 socks.config 中指定了 no_socks
-  - 对于指定的目标IP不会通过 socks代理服务器建立连接
-- 如果在 socks.config 中指定了 socks 规则
-  - 匹配规则的连接，使用 socks 规则指定的 socks代理服务器 建立连接
-  - 如果 socks 规则为空，或未匹配任何一条规则，则查看 default_servers
-- 如果在 records.config 中配置了 default_servers
-  - 所有对外发起的请求首先匹配 socks 规则，未匹配中规则的都会通过 default_servers 建立连接
+- if no_socks is specified in socks.config
+  - Connections will not be established through the socks proxy server for the specified target IP
+- If the socks rule is specified in socks.config
+  - Match the connection of the rule, establish a connection using the socks proxy server specified by the socks rule
+  - If the socks rule is empty or does not match any of the rules, look at default_servers
+- if default_servers is configured in records.config
+  - All outbound requests match the socks rule first, and those that do not match will connect via default_servers
 
-两种典型的应用场景如下：
+Two typical application scenarios are as follows:
 
-1. 所有对外发起的连接都通过指定的Socks代理服务器，只有特定的目标IP地址不通过Socks代理服务器
-   - 配置 records.config 的 default_servers 为指定的 Socks代理服务器
-   - 配置 socks.config 的 no_socks 排除特定的目标IP
-2. 只有特定目标IP地址才通过Socks代理服务器
-   - 配置 records.config 的 default_servers 为空
-   - 配置 socks.config 的 socks规则，设置特定目标IP通过指定的Socks代理服务器
+1. All externally initiated connections pass through the specified Socks proxy server, and only specific target IP addresses do not pass through the Socks proxy server.
+   - Configure default_servers for records.config to the specified Socks proxy server
+   - Configure no_socks for socks.config to exclude specific target IPs
+2. Only the specific target IP address passes through the Socks proxy server.
+   - Configure default_servers for records.config to be empty
+   - Configure the socks rules for socks.config to set a specific target IP through the specified Socks proxy server
 
-## 配置 socks.config
+## Configuring socks.config
 
-设置 Socks 5 代理服务器需要的用户名和密码
+Set the username and password required for the Socks 5 proxy server
 
-- 当配置多个 Socks 5 代理时，所有代理都将使用同一个用户名和密码
+- When configuring multiple Socks 5 agents, all agents will use the same username and password
 - auth u <user_name> <pasword>
 
-设置 Socks 例外规则
+Set the Socks exception rule
 
-- 如果希望对特定的目标IP发起请求时，不通过Socks Server代理，而是由ATS直接对OS发起连接，
-- 可以在socks.config 中使用no_socks配置项指定该目标IP
-- 可以指定单一IP
+- If you want to initiate a request for a specific target IP, instead of passing through the Socks Server proxy, the ATS initiates a connection directly to the OS.
+- The target IP can be specified in the socks.config using the no_socks configuration item
+- Can specify a single IP
   - no_socks x1.x2.x3.x4
-- 可以指定IP范围
+- IP range can be specified
   - no_socks x1.x2.x3.x4 - y1.y2.y3.y4
-- 可以通过逗号分隔多个规则
+- Multiple rules can be separated by commas
   - no_socks 123.14.84.1 - 123.14.89.4, 109.32.15.2
 
-设置 Socks 规则
+Set up Socks rules
 
-- 如果希望对不同的目标IP应用不同的Socks Server代理服务器，
-- 可以在socks.config 中使用与 parent.config 中相类似的配置项
-- 但是在socks.config中仅支持 dest_ip 配置项
-- 及两个附属配置项 parent，round_robin
-- 例如：
-  - 对于目标IP地址范围：216.32.0.0-216.32.255.255
-  - 采用 socks1:4080 和 socks2:1080 这两个 socks server 提供代理
-  - 上述两个 socks server 采用 round robin 的 strict 模式（第一个socks代理请求通过socks1:4080，第二个则通过socks2:1080）
+- If you want to apply a different Socks Server proxy server to different target IPs,
+- You can use configuration items similar to those in parent.config in socks.config
+- but only the dest_ip configuration item is supported in socks.config
+- and two dependent configuration items parent, round_robin
+- E.g:
+  - For the target IP address range: 216.32.0.0-216.32.255.255
+  - Provide proxy with two socks servers: socks1:4080 and socks2:1080
+  - The above two socks servers use the strict mode of round robin (the first socks proxy requests through socks1:4080 and the second through socks2:1080)
 
 ```
-dest_ip=216.32.0.0-216.32.255.255 parent="socks1:4080; socks2:1080" round_robin=strict
+Dest_ip=216.32.0.0-216.32.255.255 parent="socks1:4080; socks2:1080" round_robin=strict
 ```
 
-如目标IP未包含在上述规则中，则使用 proxy.config.socks.default_servers 所指定的 Socks 代理服务器。
+If the target IP is not included in the above rules, the Socks proxy server specified by proxy.config.socks.default_servers is used.
 
-## 参考资料
+## References
 
-- [I_Socks.h](http://github.com/apache/trafficserver/tree/master/iocore/net/I_Socks.h)
-- [P_Socks.h](http://github.com/apache/trafficserver/tree/master/iocore/net/P_Socks.h)
-- [mgmt/RecordsConfig.cc](http://github.com/apache/trafficserver/tree/master/mgmt/RecordsConfig.cc)
+- [I_Socks.h] (http://github.com/apache/trafficserver/tree/master/iocore/net/I_Socks.h)
+- [P_Socks.h] (http://github.com/apache/trafficserver/tree/master/iocore/net/P_Socks.h)
+- [mgmt/RecordsConfig.cc] (http://github.com/apache/trafficserver/tree/master/mgmt/RecordsConfig.cc)

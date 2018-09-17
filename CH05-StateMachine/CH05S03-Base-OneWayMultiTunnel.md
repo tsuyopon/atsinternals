@@ -1,25 +1,25 @@
-# 基础组件：OneWayMultiTunnel
+# Base component: OneWayMultiTunnel
 
-直接翻译 I_OneWayMultiTunnel.h 中的一段注释，如下：
+Directly translate a comment in I_OneWayMultiTunnel.h as follows:
 
-OneWayMultiTunnel是连接一个源VC和多个目标VC的通用状态机，它与OneWayTunnel非常相似。
-但是，它连接了多个目标VC，将源VC读取到的数据写入所有目的VC。
-宏定义ONE_WAY_MULTI_TUNNEL_LIMIT，限定了目标VC的最大数量。
+OneWayMultiTunnel is a general-purpose state machine that connects a source VC to multiple target VCs. It is very similar to OneWayTunnel.
+However, it connects multiple target VCs and writes the data read by the source VC to all destination VCs.
+The macro defines ONE_WAY_MULTI_TUNNEL_LIMIT, which defines the maximum number of target VCs.
 
-其它请参考 OneWayTunnel
+Please refer to OneWayTunnel for other details.
 
-## 定义
+## definition
 
-```
+`` `
 /** Maximum number which can be tunnelled too */
-// 由于每一个目标VC都需要从MIOBuffer分配一个 IOBufferReader，而源VC也使用了一个IOBufferReader。
-// 所以，这里定义的目标VC数量的最大值要比 IOBufferReader 的最大值少一个（被源VC使用）
-// 在 I_IOBuffer.h 中定义了一个 MIOBuffer 可分配的 IOBufferReader 的最大值为 5
+// Since each target VC needs to allocate an IOBufferReader from MIOBuffer, the source VC also uses an IOBufferReader.
+// So, the maximum number of target VCs defined here is one less than the maximum value of IOBufferReader (used by the source VC)
+// The maximum value of an MIOBuffer assignable IOBufferReader defined in I_IOBuffer.h is 5
 //     #define MAX_MIOBUFFER_READERS 5
-// 所以这里只能定义为 4，如果需要更多的目标VC，需要同时修改 IOBufferReader 的最大值。
+// So here can only be defined as 4, if you need more target VC, you need to modify the maximum value of IOBufferReader at the same time.
 #define ONE_WAY_MULTI_TUNNEL_LIMIT 4
 
-// 继承自 OneWayTunnel
+// Inherited from OneWayTunnel
 struct OneWayMultiTunnel : public OneWayTunnel {
   //
   // Public Interface
@@ -27,27 +27,27 @@ struct OneWayMultiTunnel : public OneWayTunnel {
 
   // Use these to construct/destruct OneWayMultiTunnel objects
 
-  /**
+  / **
     Allocates a OneWayMultiTunnel object.
-    静态方法，用来创建 OneWayMultiTunnel 对象
+    Static method to create a OneWayMultiTunnel object
 
     @return new OneWayTunnel object.
 
-  */
+  * /
   static OneWayMultiTunnel *OneWayMultiTunnel_alloc();
 
-  /**
+  / **
     Deallocates a OneWayTunnel object.
-    静态方法，用来释放 OneWayMultiTunnel 对象
-  */
+    Static method to release the OneWayMultiTunnel object
+  * /
   static void OneWayMultiTunnel_free(OneWayMultiTunnel *);
-  // 构造函数
+  // Constructor
   OneWayMultiTunnel();
 
   // Use One of the following init functions to start the tunnel.
-  // init函数有多重类型，请根据需求选择恰当的init函数启动tunnel
-  /**
-    第一种 init() 方法，下面会有详细的介绍和分析
+  // The init function has multiple types. Please select the appropriate init function to start the tunnel according to your needs.
+  / **
+    The first init() method, which will be described and analyzed in detail below.
     This init function sets up the read (calls do_io_read) and the write
     (calls do_io_write).
 
@@ -76,14 +76,14 @@ struct OneWayMultiTunnel : public OneWayTunnel {
       input buffer.
     @param water_mark for the MIOBuffer used for reading.
 
-  */
+  * /
   void init(VConnection *vcSource, VConnection **vcTargets, int n_vcTargets, Continuation *aCont = NULL,
             int size_estimate = 0, // 0 == best guess
             int64_t nbytes = TUNNEL_TILL_DONE, bool asingle_buffer = true, bool aclose_source = true, bool aclose_target = true,
             Transform_fn manipulate_fn = NULL, int water_mark = 0);
 
-  /**
-    第二种 init() 方法，下面会有详细的介绍和分析
+  / **
+    The second init() method, which will be described and analyzed in detail below.
     Use this init function if both the read and the write sides have
     already been setup. The tunnel assumes that the read VC and the
     write VCs are using the same buffer and frees that buffer when the
@@ -100,194 +100,194 @@ struct OneWayMultiTunnel : public OneWayTunnel {
     @param aclose_target ff true, the tunnel closes vcTarget at the
       end. If aCont is not specified, this should be set to true.
 
-  */
+  * /
   void init(Continuation *aCont, VIO *SourceVio, VIO **TargetVios, int n_vioTargets, bool aclose_source = true,
             bool aclose_target = true);
 
   //
   // Private
   //
-  // 主状态处理函数
+  // main state handler
   int startEvent(int event, void *data);
 
-  // 同时激活源VC和目标VC
-  // 没有看到任何调用的示例，不清楚具体功能
+  // Activate both source VC and target VC
+  // I don’t see any examples of calls, I don’t know the specific function.
   virtual void reenable_all();
-  // 如果vio==NULL，关闭所有目标VIO及VC
-  // 否则，只关闭指定的VIO及对应的VC
+  // If vio==NULL, turn off all target VIOs and VCs
+  // Otherwise, only the specified VIO and corresponding VC are closed
   virtual void close_target_vio(int result, VIO *vio = NULL);
 
-  // 表示当前管理的目标VC的数量，默认为0
+  // indicates the number of target VCs currently managed. The default is 0.
   int n_vioTargets;
-  // 数组，保存了每一个目标VC对应的Write VIO
+  // array, which holds the Write VIO for each target VC
   VIO *vioTargets[ONE_WAY_MULTI_TUNNEL_LIMIT];
-  // 设置为写入目标VC MIOBuffer的封装
+  / / Set to write to the target VC MIOBuffer package
   MIOBufferAccessor topOutBuffer;
-  // 默认为false，在进入到init函数之前可能Source VIO就已经完成了（ntodo == 0）
+  // The default is false. Source VIO may have completed before entering the init function (ntodo == 0)
   bool source_read_previously_completed;
 };
-```
+`` `
 
-## 方法
+## Method
 
-### 第一种 init() 方法
+### The first init() method
 
-```
+`` `
 void init(VConnection *vcSource, VConnection **vcTargets, int n_vcTargets, 
          Continuation *aCont = NULL, int size_estimate = 0, // 0 == best guess
          int64_t nbytes = TUNNEL_TILL_DONE, bool asingle_buffer = true, 
          bool aclose_source = true, bool aclose_target = true,
          Transform_fn manipulate_fn = NULL, int water_mark = 0);
-```
-init函数，将在源VC上设置read（调用do_io_read），在所有目标VC上设置write（调用do_io_write）。
+`` `
+The init function will set read on the source VC (call do_io_read) and set write on all target VCs (call do_io_write).
 
-相对于第一种 OneWayTunnel::init()
+Relative to the first OneWayTunnel::init()
 
-- 增加了n_vcTargets用于指定vcTargets的数量
-- 砍掉了aMutex，因为不需要为了实现 TwoWayTunnel 而强制指定同一个mutex
-- 因此，会优先选用aCont的mutex，如果没有指定aCont，那么就new_ProxyMutex()
+- Added n_vcTargets to specify the number of vcTargets
+- Cut off aMutex because there is no need to force the same mutex to implement TwoWayTunnel
+- Therefore, aCont's mutex will be preferred. If aCont is not specified, then new_ProxyMutex()
 
-需要注意的是，当asingle_buffer设置为false时：
+Note that when asingle_buffer is set to false:
 
-- 源VC独立使用一个buf
-- 所有的目标VC是共享同一个buf的，目标VC使用的IOBufferReader都是从该buf分配的
+- Source VC uses a buf independently
+- All target VCs share the same buf, and the IOBufferReader used by the target VC is allocated from the buf.
 
-### 第二种 init() 方法
+### The second init() method
 
-```
+`` `
 void init(Continuation *aCont, VIO *SourceVio, VIO **TargetVios, int n_vioTargets, 
          bool aclose_source = true, bool aclose_target = true);
-```
-init函数，表示源VC的读和目的VC的写都已经设置完成，如果没有aCont传入，则会new一个mutex出来使用，Tunnel针对源VC的读和目的VC的写，调用者需要保证，源VC和所有的目的VC都使用同一个buf（如果不是同一个buf，目前的代码会抛出异常），并在完成后释放buf。
+`` `
+Init function, indicating that the source VC read and the destination VC write have been set, if there is no aCont incoming, then a new mutex will be used, the tunnel for the source VC read and the destination VC write, the caller needs to guarantee, the source VC and all destination VCs use the same buf (if not the same buf, the current code will throw an exception), and release buf after completion.
 
-相对于第三种 OneWayTunnel::init()
+Relative to the third OneWayTunnel::init()
 
-- 增加了n_vcTargets用于指定vcTargets的数量。
+- Added n_vcTargets to specify the number of vcTargets.
 
-这种情况下，有可能之前在源VC上的读操作已经完成了，因此在初始化过程中：
-```
+In this case, it is possible that the previous read operation on the source VC has been completed, so during the initialization process:
+`` `
 source_read_previously_completed = (SourceVio->ntodo() == 0);
-```
+`` `
 
-通常在 SourceVC 上收到 READ_COMPLETE 事件后会关闭 SourceVC
+SourceVC is usually turned off after receiving the READ_COMPLETE event on SourceVC
 
-- 然后每一个 TargetVC 收到 WRITE_COMPLETE 事件后会关闭 TargetVC
-- 最后一个 TargetVC 关闭后，会自动关闭整个 OneWayMultiTunnel
+- Then each TargetVC will close TargetVC after receiving the WRITE_COMPLETE event
+- The entire OneWayMultiTunnel is automatically closed when the last TargetVC is closed
 
-但是，当 source_read_previously_completed 为 true 时，startEvent 不会在SourceVC上接收到VC_EVENT_READ_COMPLETE事件
+However, when source_read_previously_completed is true, startEvent does not receive the VC_EVENT_READ_COMPLETE event on SourceVC
 
-- 但是每一个 TargetVC 仍然会收到 WRITE_COMPLETE 事件，然后后关闭 TargetVC
-- 最后一个 TargetVC 关闭后，只剩下 SourceVC
-- 此时判断 source_read_previously_completed 为 true，则直接关闭 SourceVC
-- 最后关闭整个 OneWayMultiTunnel
+- But each TargetVC will still receive the WRITE_COMPLETE event and then close TargetVC
+- After the last TargetVC is closed, only SourceVC remains
+- At this point, if source_read_previously_completed is true, then SourceVC is directly closed.
+- Finally close the entire OneWayMultiTunnel
 
-## startEvent 流程分析
+## startEvent Process Analysis
 
-在init调用之后，Tunnel的回调函数被设置为OneWayMultiTunnel::startEvent，其内部逻辑如下：
+After the init call, the tunnel's callback function is set to OneWayMultiTunnel::startEvent, and its internal logic is as follows:
 
-```
+`` `
 当 VC_EVENT_READ_READY
-    // 由于只在源VC执行了do_io_read，所以只有源VC有数据可读时，才会触发此事件
-    // 调用transform将数据由源VIO转移到临时VIO：topOutBuffer
+    // Since do_io_read is only executed on the source VC, this event is only fired when the source VC has data readable.
+    // Call transform to transfer data from source VIO to temporary VIO: topOutBuffer
     transform(vioSource->buffer, topOutBuffer);
-    // 激活所有目标VC，使其完成写入操作
+    // Activate all target VCs to complete the write operation
     for (int i = 0; i < n_vioTargets; i++)
         if (vioTargets[i])
             vioTargets[i]->reenable();
     ret = VC_EVENT_CONT;
 
 当 VC_EVENT_WRITE_READY
-    // 由于只在目的VC执行了do_io_write，所以只有目的VC缓冲区可写时，才会触发此事件
-    // 但是由于是Tunnel，当目的VC可写时，说明目标VC的VIO有空闲空间，
-    //     此时就要激活源VC来提供数据，以灌满目的VC的写缓冲区
-    // 所以判断源VC可用，就激活源VC，使其读取数据
+    // Since do_io_write is only executed on the destination VC, this event is only fired when the destination VC buffer is writable.
+    // But because it is a tunnel, when the destination VC can be written, it indicates that the VIO of the target VC has free space.
+    // At this point, the source VC is activated to provide data to fill the write buffer of the destination VC.
+    // So if the source VC is available, activate the source VC to read the data.
     if (vioSource) vioSource->reenable();
     ret = VC_EVENT_CONT;
 
 当 VC_EVENT_EOS
-    // 通常表示连接关闭
-    // 如果不是传输到连接关闭才算任务完成的Tunnel类型，
-    // 就需要判断传入的VIO是否还有数据没有完成，如果有，那就是Tunnel出现了错误
+    // usually indicates that the connection is closed
+    // If the tunnel type is not completed until the connection is closed,
+    // It is necessary to determine if there is still data in the incoming VIO. If there is, then the Tunnel has an error.
     if (!tunnel_till_done && vio->ntodo())
         goto Lerror;
-    // 判断是哪一端关闭了连接，如果是源VC，那么把buf内的数据写完，然后按照VC_EVENT_READ_COMPLETE来处理
+    / / Determine which end is closed the connection, if it is the source VC, then write the data in the buf, and then deal with according to VC_EVENT_READ_COMPLETE
     if (vio == vioSource) {
         transform(vioSource->buffer, topOutBuffer);
         goto Lread_complete;
-    // 如果是目的VC关闭了，那么就按照VC_EVENT_WRITE_COMPLETE来处理
+    // If the destination VC is closed, then it is processed according to VC_EVENT_WRITE_COMPLETE
     } else goto Lwrite_complete;
 
 Lread_complete:
 当 VC_EVENT_READ_COMPLETE
     // set write nbytes to the current buffer size
-    // 处理每一个目标VC
+    // handle each target VC
     for (int i = 0; i < n_vioTargets; i++)
         if (vioTargets[i]) {
-            // 计算实际的目标VC需要完成的写入字节数 ＝ 前面已经完成的 ＋ 缓冲区读到的新数据
+            // Calculate the number of write bytes that the actual target VC needs to complete = new data read by the + buffer that was previously completed
             vioTarget->nbytes = vioTarget->ndone + vioTarget->buffer.reader()->read_avail();
-            // 如果还没完成，激活目标VC完成写操作
+            // If the target VC has not been completed, activate the target VC to complete the write operation.
             vioTarget->reenable();
         }
-    // 由于读取操作完成，因此关闭源VC的VIO
-    // 传递给close_source_vio参数0表示传递给do_io_close的lerrno参数为-1（代表正常关闭）
+    // Turn off the VIO of the source VC because the read operation is complete
+    // passed to the close_source_vio parameter 0 indicating that the lerrno parameter passed to do_io_close is -1 (representing normal shutdown)
     close_source_vio(0);
     ret = VC_EVENT_DONE;
 
 Lwrite_complete:
 当 case VC_EVENT_WRITE_COMPLETE
-    // 关闭该目标VC的VIO
+    / / Close the VIO of the target VC
     close_target_vio(0, (VIO *)data);
-    // 判断剩余的通道数量
-    //     如果剩余0个通道
-    //     或者剩余通道数为1同时source_read_previously_completed为true
-    // 备注：当source_read_previously_completed为true时，不会触发VC_EVENT_READ_COMPLETE事件，
-    //      因此，源VC无法主动关闭，这里剩余的一个通道就是源VC的读通道。
-    //      对比OneWayTunnel，则是以VC_EVENT_WRITE_COMPLETE作为Tunnel完成的唯一标识，
-    //      收到VC_EVENT_WRITE_COMPLETE，就表示Tunnel完成，此时直接关闭源VC和目标VC的VIO，以及连接。
+    / / Determine the number of remaining channels
+    // if there are 0 channels remaining
+    // or the number of remaining channels is 1 while source_read_previously_completed is true
+    // Note: The VC_EVENT_READ_COMPLETE event is not fired when source_read_previously_completed is true.
+    // Therefore, the source VC cannot be actively shut down. The remaining channel here is the read channel of the source VC.
+    // Compare OneWayTunnel with VC_EVENT_WRITE_COMPLETE as the unique identifier for the tunnel.
+    // When VC_EVENT_WRITE_COMPLETE is received, it means that the tunnel is completed. At this time, the VIO of the source VC and the target VC are directly closed, and the connection is completed.
     if ((n_connections == 0) || (n_connections == 1 && source_read_previously_completed))
-    // 就表示Tunnel整个都结束/完成了
+    // means that the entire tunnel is over/completed.
         goto Ldone;
-    // 否则，判断源VC可用，就激活源VC，使其读取数据
-    // 这种情况下，源VC的VIO应该已经关闭了
-    // 如果源VC没有关闭，激活源VC只是为了让源VC触发VC_EVENT_EOS，
-    // 触发VC_EVENT_EOS后，又会激活所有可用的目标VC执行写操作。
+    // Otherwise, if the source VC is available, the source VC is activated to read the data.
+    // In this case, the VIO of the source VC should have been closed.
+    // If the source VC is not closed, the source VC is activated just to let the source VC trigger VC_EVENT_EOS.
+    // After VC_EVENT_EOS is triggered, all available target VCs are activated to perform write operations.
     else if (vioSource)
       vioSource->reenable();
 
-Lerror:
-当 出现错误、超时、或者Tunnel完成后
+Learner:
+When an error occurs, timeout, or after the tunnel is completed
     result = -1;
 Ldone:
-    // 需要根据init的设置，关闭源VC，目标VC
+    / / Need to close the source VC, target VC according to the init settings
     close_source_vio(result);
     close_target_vio(result);
-    // 负责释放Tunnel，如果在init时传入了aCont，则负责回调aCont，aCont将负责释放Tunnel
+    / / Responsible for releasing the Tunnel, if aCont is passed in init, it is responsible for callback aCont, aCont will be responsible for releasing the Tunnel
     connection_closed(result);
 
-```
+`` `
 
-由于在源VC的MIOBuffer与目标VC的MIOBuffer中传递数据时，仍然调用的是继承自 OneWayTunnel 的 transform() 函数，因此 OneWayMultiTunnel 同样也仅支持 single_buffer == true 的情况。
+Since the transform() function inherited from OneWayTunnel is still called when the data is passed in the MIOBuffer of the source VC and the MIOBuffer of the target VC, the OneWayMultiTunnel also supports only single_buffer == true.
 
-## 适用场景
+## Applicable scene
 
-在 Cache 服务器的设计中，我们从源站拿到数据之后，如果这份数据需要同时发送给客户端和保存到磁盘时，就产生了对 OneWayMultiTunnel 的需求。
+In the design of the Cache server, after we get the data from the source station, if this data needs to be sent to the client and saved to disk at the same time, the demand for OneWayMultiTunnel is generated.
 
-- 此时 ServerVC 作为源VC，而 ClientVC 和 CacheVC 作为目标VC
-- OneWayMultiTunnel 从 ServerVC 读取数据
-- 然后向 ClientVC 和 CacheVC 发送数据
-- 当 ClientVC 接收了全部数据的同时，CacheVC 也接收了全部数据并保存到了磁盘
+- ServerVC is now the source VC, and ClientVC and CacheVC are the target VCs
+- OneWayMultiTunnel reads data from ServerVC
+- Then send data to ClientVC and CacheVC
+- When ClientVC receives all the data, CacheVC also receives all the data and saves it to disk.
 
-在实现代理服务的合并回源功能时，也同样会需要使用 OneWayMultiTunnel
+OneWayMultiTunnel is also required when implementing the merge back function of the proxy service.
 
-- Client A 和 Client B 都发起了对 Server 的访问
-- Client A 先发起了该请求，代理服务器将请求转发给 Server
-- 在 Server 产生响应之前，Client B 的请求到达代理服务器，代理服务器判断可以与 Client A 的请求合并
-- 这样以 ServerVC 作为源VC，Client A 和 Client B 作为目标 VC 创建 OneWayMultiTunnel
-- Server VC 回应的数据会同时到达 Client A 和 Client B
+- Both Client A and Client B initiated access to the Server
+- Client A first initiated the request and the proxy server forwarded the request to the server.
+- Client B's request arrives at the proxy server before the server generates a response, and the proxy server determines that it can merge with Client A's request.
+- This creates a OneWayMultiTunnel with ServerVC as the source VC and Client A and Client B as the target VC.
+- The data that the Server VC responds to both Client A and Client B
 
-Tunnel 状态机提供了非常基础的数据流转发功能，在事务信息处理完成后，大多数的状态机都会借助 Tunnel 状态机完成大量数据转发的工作。
+The tunnel state machine provides a very basic data stream forwarding function. After the transaction information processing is completed, most state machines will complete a large amount of data forwarding by using the tunnel state machine.
 
-## 参考资料
+## References
 
 - [I_OneWayMultiTunnel.h](http://github.com/apache/trafficserver/tree/master/iocore/utils/I_OneWayMultiTunnel.h)
 - [I_OneWayTunnel.h](http://github.com/apache/trafficserver/tree/master/iocore/utils/I_OneWayTunnel.h)

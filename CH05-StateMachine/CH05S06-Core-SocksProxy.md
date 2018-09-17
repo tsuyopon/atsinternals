@@ -1,17 +1,17 @@
-# 核心组件：SocksProxy
+# core component: SocksProxy
 
-SocksProxy 是ATS作为Socks Proxy接收来自Socks Client请求的状态机。
+SocksProxy is the state machine that ATS receives as a Socks Proxy from Socks Client requests.
 
-在 SocksProxy 中，识别出满足下面条件的Socks请求后，会转入 HttpSM 进行处理：
+In SocksProxy, after identifying the Socks request that satisfies the following conditions, it will be transferred to HttpSM for processing:
 
-- Socks命令是 CONNECT
-- 目标IP是 IPv4
-- 目标端口是 80
+- The Socks command is CONNECT
+- The target IP is IPv4
+- The target port is 80
 
-对于不满足条件的则根据 socks.config 和 records.config 中的配置对 Socks 请求进行透传（Tunnel）
+For those that do not meet the conditions, pass the Socks request transparently according to the configuration in socks.config and records.config (Tunnel)
 
-## 定义
+## definition
 
-## 参考资料
+## References
 
 - [SocksProxy.cc](http://github.com/apache/trafficserver/tree/master/proxy/SocksProxy.cc)

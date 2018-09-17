@@ -1,78 +1,78 @@
-# 基础组件：TwoWayTunnel
+# Base component: TwoWayTunnel
 
-OneWayTunnel 在设计之初就考虑到了数据不可能只是单向的流动，对于一对VC，会有数据从eastVC传输到westVC，也会有数据从westVC传输到eastVC。
+OneWayTunnel was designed with the data in mind as a one-way flow. For a pair of VCs, data will be transferred from eastVC to westVC, and data will be transferred from westVC to eastVC.
 
-通过把两个 OneWayTunnel 关联到一起，就非常简单的实现了TwoWayTunnel。
+By linking the two OneWayTunnels together, it is very simple to implement TwoWayTunnel.
 
-## 实现
+##implementation
 
-假定我们当前在一个状态机里，该状态机已经得到一个成功建立的clientVC，同时该状态机已经发起了一个serverVC。
+Suppose we are currently in a state machine, the state machine has got a successfully established clientVC, and the state machine has already started a serverVC.
 
-当这个状态机收到了针对此 serverVC 的 NET_EVENT_OPEN 事件时，就表示 serverVC 已经成功与服务器端建立了 TCP 连接。
+When this state machine receives the NET_EVENT_OPEN event for this serverVC, it means that serverVC has successfully established a TCP connection with the server.
 
-此时我们要为 客户端 和 服务器端 的两个 VC 建立一个 TwoWayTunnel 以实现他们的互通。
+At this point we need to establish a TwoWayTunnel for the two VCs on the client and server side to achieve their interoperability.
 
-首先，创建两个 OneWayTunnel
+First, create two OneWayTunnel
 
-```
+`` `
 OneWayTunnel *c_to_s = OneWayTunnel::OneWayTunnel_alloc();
 OneWayTunnel *s_to_c = OneWayTunnel::OneWayTunnel_alloc();
 
-// 由于我们已经为 clientVC 做过 do_io_read 操作，已经申请了 MIOBuffer，对应的 IOBufferReader 为 reader
-// 因此，调用第二种 init() 来初始化：
-//   只对 serverVC 执行 do_io_write
-//   传入的状态机为空，此时 mutex＝new()
+// Since we have done the do_io_read operation for clientVC, we have applied for MIOBuffer and the corresponding IOBufferReader is reader.
+// So, call the second init() to initialize:
+// only do_io_write on serverVC
+// The incoming state machine is empty, at this time mutex=new()
 c_to_s->init(clientVC, serverVC, NULL, clientVIO, reader);
 
-// 然后，调用第一种init初始化：
-//   对 serverVC 执行 do_io_read
-//   对 clientVC 执行 do_io_write
-//   将 c_to_s 的 mutex 传递进去，让两个 OneWayTunnel 共享同一个 mutex
+// Then, call the first init initialization:
+// execute do_io_read on serverVC
+// execute do_io_write on clientVC
+// Pass the cex of c_to_s into it, let the two OneWayTunnel share the same mutex
 s_to_c->init(serverVC, clientVC, NULL, 0 , c_to_s->mutex);
 
-// 最后，关联两个Tunnel
+// Finally, associate two tunnels
 OneWayTunnel::SetupTwoWayTunnel(c_to_s, s_to_c);
-```
+`` `
 
-至此，这个 TwoWayTunnel 就建立起来了，clientVC 如果有数据可读，就会读取到内部的MIOBuffer里，然后在 serverVC 可写的时候发送出去。
-同样的，当 serverVC 如果有数据可读，就会读取到内部的MIOBuffer里，然后在 clientVC 可写的时候发送出去。
+At this point, the TwoWayTunnel is built. If the clientVC has data, it will be read into the internal MIOBuffer and then sent out when the serverVC is writable.
+Similarly, when serverVC has data readable, it will be read into the internal MIOBuffer and then sent out when clientVC is writable.
 
-可以完全看作是两个独立的 OneWayTunnel 在工作，但是由于两个 Tunnel 共享同一个 mutex，所以两个方向的数据传递总是交替进行。
-实际上 clientVC 和 serverVC 在同一个 ET_NET 线程里，它们总是被先后回调，因此两个 OneWayTunnel 不会同时被回调。
+It can be thought of as two separate OneWayTunnels working, but since the two tunnels share the same mutex, the data transfer in both directions always alternates.
+In fact, clientVC and serverVC are in the same ET_NET thread, they are always called back, so the two OneWayTunnel will not be called back at the same time.
 
-双向通信的关键在于，当一个VC收到了EOS或者完成了既定的传输字节数，需要进行关闭时，它要同时考虑两个Tunnel的情况：
+The key to two-way communication is that when a VC receives an EOS or completes a given number of transmitted bytes and needs to be closed, it must consider both tunnels simultaneously:
 
-- 当clientVC收到了EOS，作为Tunnel c_to_s中的源VC时，需要查看serverVC是否已经将MIOBuffer的内容全部发送出去了
-  - 如果还有数据需要发送，就激活serverVC，以完成剩余数据的发送
-- 当clientVC收到了ERROR，作为Tunnel s_to_c中的目标VC时，需要通知Tunnel c_to_s，当前Tunnel即将关闭
-  - Tunnel c_to_s收到通知后，会关闭clientVC的readVIO和serverVC的writeVIO，并释放 Tunnel，但是两个VC并不会关闭
-  - 然后Tunnel s_to_c会关闭clientVC的writeVIO和serverVC的readVIO，关闭两个VC，并释放 Tunnel。
+- When clientVC receives EOS as the source VC in tunnel c_to_s, you need to check whether serverVC has sent all the contents of MIOBuffer.
+  - If there is still data to send, activate serverVC to complete the sending of the remaining data.
+- When clientVC receives ERROR as the target VC in Tunnel s_to_c, it needs to notify Tunnel c_to_s that the current tunnel is about to close.
+  - After the tunnel c_to_s receives the notification, it will close the readVIO of clientVC and the writeVIO of serverVC, and release the tunnel, but the two VCs will not be closed.
+  - Then Tunnel s_to_c will close clientVC's writeVIO and serverVC readVIO, close both VCs, and release the tunnel.
 
-可以看到，TwoWayTunnel 是以目标VIO完成为依据来进行关闭的。
+As you can see, TwoWayTunnel is closed based on the target VIO completion.
 
-- 任何一个 OneWayTunnel 收到 WRITE_COMPLETE 事件，就直接关闭另一个 OneWayTunnel
-  - 然后再关闭两个VC，最后关闭自己
-- 但是收到 EOS 时，则会设置目标VC的VIO为完成剩余MIOBuffer内数据的发送
-  - 然后等待目标VC完成数据发送，OneWayTunnel 收到 WRITE_COMPLETE 事件
+- Any OneWayTunnel receives a WRITE_COMPLETE event and closes another OneWayTunnel
+  - Then close both VCs and finally close yourself
+- However, when EOS is received, the VIO of the target VC is set to complete the transmission of data in the remaining MIOBuffer.
+  - Then wait for the target VC to complete the data transmission, OneWayTunnel receives the WRITE_COMPLETE event
 
-在 TwoWayTunnel 中，一个方向关闭，另外一个方向也会被关闭，即使另外一个OneWayTunnel仍然在正常通信。
-例如，通过shutdown进行半关闭，会导致一个OneWayTunnel的关闭，但是另外一个方向的OneWayTunnel仍然可以进行通信，此时也被迫关闭了。
+In TwoWayTunnel, one direction is turned off and the other direction is turned off, even if another OneWayTunnel is still communicating normally.
+For example, a half-shutdown via shutdown will cause a OneWayTunnel to be closed, but the OneWayTunnel in the other direction will still be able to communicate and will be forced to close.
 
-## 成员
+## Members
 
-在 OneWayTunnel 中定义了成员：
+Members are defined in OneWayTunnel:
 
 - tunnel_peer
-  - 指向关联的 OneWayTunnel
+  - Point to the associated OneWayTunnel
 - free_vcs
-  - 默认为 true，表示在关闭VIO之后，关闭VC
-  - 但是当 OneWayTunnel 收到对端的关闭通知时，不会在关闭VIO之后继续关闭VC，而是由发起通知的一方完成VC的关闭
+  - The default is true, which means that VC is turned off after VIO is turned off.
+  - However, when OneWayTunnel receives the close notification of the peer, it will not continue to close the VC after closing VIO, but the party that initiated the notification completes the VC shutdown.
 
-## 方法
+## Method
 
-在 startEvent 里判断来自对端 OneWayTunnel 的通知，在 WRITE_COMPLETE 之后发送通知给对端 OneWayTunnel：
+In the startEvent, the notification from the peer OneWayTunnel is determined, and after the WRITE_COMPLETE, the notification is sent to the peer OneWayTunnel:
 
-```
+`` `
   switch (event) {
   case ONE_WAY_TUNNEL_EVENT_PEER_CLOSE:
     /* This event is sent out by our peer */
@@ -93,11 +93,11 @@ OneWayTunnel::SetupTwoWayTunnel(c_to_s, s_to_c);
     close_target_vio(result);
     connection_closed(result);
     break;
-```
+`` `
 
 
-在关闭VIO之后，根据free_vcs的值，判断是否继续关闭VC
-```
+After closing VIO, according to the value of free_vcs, determine whether to continue to close VC
+`` `
 void
 OneWayTunnel::close_source_vio(int result)
 {
@@ -117,7 +117,7 @@ OneWayTunnel::close_source_vio(int result)
 void
 OneWayTunnel::close_target_vio(int result, VIO *vio)
 { 
-  (void)vio;
+  (Void) pattern;
   if (vioTarget) {
     if (last_connection() || !single_buffer) {
       free_MIOBuffer(vioTarget->buffer.writer());
@@ -130,11 +130,11 @@ OneWayTunnel::close_target_vio(int result, VIO *vio)
     n_connections--;
   }
 }
-```
+`` `
 
-通过 SetupTwoWayTunnel 完成两个 OneWayTunnel 的关联：
+Complete the association of two OneWayTunnels via SetupTwoWayTunnel:
 
-```
+`` `
 void
 OneWayTunnel::SetupTwoWayTunnel(OneWayTunnel *east, OneWayTunnel *west)
 {
@@ -144,53 +144,53 @@ OneWayTunnel::SetupTwoWayTunnel(OneWayTunnel *east, OneWayTunnel *west)
   east->tunnel_peer = west;
   west->tunnel_peer = east;
 }
-```
-## 状态机的设计模式
+`` `
+## state machine design pattern
 
-我们看到 TwoWayTunnel 是由两个 OneWayTunnel 组成，它们共享一个 mutex，而且它们之间还设计了专门进行协同的事件。
+We see that TwoWayTunnel is made up of two OneWayTunnels that share a mutex and are designed with events specifically for collaboration.
 
-每一个 OneWayTunnel 管理两个VC，但是对于其中任何一个VC来说：
+Each OneWayTunnel manages two VCs, but for any one of them:
 
-- OneWayTunnel 要么负责接收数据，要么负责发送数据
-- 但是不会既接收又发送数据
+- OneWayTunnel is either responsible for receiving data or for sending data
+- but will not both receive and send data
 
-也就是说 OneWayTunnel 只管理这两个VC的一半功能。
+This means that OneWayTunnel only manages half of the functionality of these two VCs.
 
-在 TwoWayTunnel 中：
+In TwoWayTunnel:
 
-- 一个VC的 数据接收 被一个OneWayTunnel管理时，
-- 这个VC的 数据发送 则被另外一个OneWayTunnel管理
+- When a VC's data is received and managed by a OneWayTunnel,
+- This VC's data transmission is managed by another OneWayTunnel
 
-TwoWayTunnel 的设计实现了对两个VC的完全管理，但是 TwoWayTunnel 并不是一个状态机，它是通过两个 OneWayTunnel 之间的通知机制，以及在两个 OneWayTunnel 中共享同一个 mutex 来实现了两个 OneWayTunnel 的协同。
+TwoWayTunnel is designed to fully manage two VCs, but TwoWayTunnel is not a state machine. It implements two OneWayTunnels through a notification mechanism between two OneWayTunnels and sharing the same mutex in two OneWayTunnels. Collaboration.
 
-但是我们从代码的实现上也看到了 TwoWayTunnel 里存在的一个问题，就是不支持“TCP的半关闭”，当其中一个VC发起了shutdown，那么TwoWayTunnel就要同时关闭两个VC，所以我们看到 Tunnel 状态机能做的事情非常的简单，使用它来实现单纯的 TCP代理 及其 附属功能 是完全没有问题的，但是如果需要实现基于TCP通信的高级协议处理，Tunnel 状态机则会很难实现。
+But we also see a problem in TwoWayTunnel from the implementation of the code, that is, does not support "TCP half-close", when one VC initiates shutdown, then TwoWayTunnel will close both VCs at the same time, so we see the Tunnel The state machine can do very simple things. It is completely no problem to use it to implement pure TCP proxy and its auxiliary functions. However, if you need to implement advanced protocol processing based on TCP communication, the Tunnel state machine will be difficult to implement.
 
-因此，TCP代理和流处理才是 Tunnel 状态机的强项。
+Therefore, TCP proxy and stream processing are the strengths of the Tunnel state machine.
 
-同时，我们看到双 MIOBuffer 的功能还未在代码里实现，通过双MIOBuffer我们可以
+At the same time, we see that the dual MIOBuffer function has not been implemented in the code, we can do it through the dual MIOBuffer
 
-- 实现对Tunnel内数据流的修改
-- 在Tunnel里实现流量控制等功能
+- Implement modification of the data flow in the tunnel
+- Implement flow control and other functions in the tunnel
 
-但是当我们需要实现复杂的状态机设计时，我们会让一个状态机同时管理一个VC的数据接收和发送，例如：
+But when we need to implement a complex state machine design, we will let a state machine manage the data reception and transmission of a VC at the same time, for example:
 
-- 接收一个请求，发现请求是不合法的，我们可以直接发送错误信息
-- 但是当请求是合法内容时，可以通过Tunnel状态机完成数据流的传递
+- Receive a request and find that the request is illegal, we can send the error message directly
+- But when the request is legal, the data flow can be completed through the Tunnel state machine.
 
-此时我们就需要先建立一个能够与ClientVC进行交互的状态机，然后再把VC的控制权转交给Tunnel状态机，Tunnel状态机处理完成后，再返回到交互状态机。
+At this point, we need to establish a state machine that can interact with ClientVC, and then transfer the control of the VC to the Tunnel state machine. After the tunnel state machine is processed, it will return to the interactive state machine.
 
-这种嵌套的设计，在ATS中使用主－从关系来表述：
+This nested design is expressed in the ATS using a master-slave relationship:
 
-- 与ClientVC进行交互的状态机被叫做“主状态机”（Master SM）
-- 与ServerVC进行交互的状态机被叫做“从状态机”（Slave SM）
-- 把ClientVC和ServerVC连接起来的Tunnel状态机也被叫做“从状态机”（Slave SM）
+- The state machine that interacts with ClientVC is called the "master state machine" (Master SM)
+- The state machine that interacts with ServerVC is called the "slave state machine" (Slave SM)
+- The Tunnel state machine that connects ClientVC and ServerVC is also called "slave SM" (Slave SM)
 
-一个“主状态机”（Master SM）可以关联多个“从状态机”（Slave SM），当需要执行特定子任务时：
+A Master SM can associate multiple Slave SMs when a specific subtask needs to be performed:
 
-- 主状态机创建从状态机，并调用从状态机的构造函数把VC的控制权移交给从状态机，
-- 当从状态机完成任务之后，回调主状态机，由主状态机重新获得VC的控制权，并销毁从状态机。
+- the master state machine creates a slave state machine and calls the constructor from the state machine to hand over control of the VC to the slave state machine,
+- When the task is completed from the state machine, the primary state machine is called back, the master state machine regains control of the VC, and the slave state machine is destroyed.
 
-在后面介绍 HttpSM 状态机时，会看到其内包含了 Tunnel 状态机的设计，在ATS中普遍存在这种大状态机里面嵌套小状态机的设计。
+When we introduce the HttpSM state machine later, we will see the design of the Tunnel state machine. The design of the nested small state machine in this large state machine is common in ATS.
 
-## 参考资料
+## References
 - [I_OneWayTunnel.h](http://github.com/apache/trafficserver/tree/master/iocore/utils/I_OneWayTunnel.h)
