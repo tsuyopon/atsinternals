@@ -1,121 +1,121 @@
-# 核心部件：Throttle
+# Core part: Throttle
 
-Throttle 并不是一个类，而是几个全局变量、统计值和一组函数。
+Throttle is not a class, but several global variables, statistical values, and a set of functions.
 
-通过在下面的方法中调用这些相关的函数，实现了Throttle
+Throttle is implemented by calling these related functions in the following methods.
 
   - NetAccept::do_blocking_accept
   - NetAccept::acceptFastEvent
   - UnixNetVConnection::connectUp
 
-ATS 的 Throttle 的设计分为：
+ATS's Throttle design is divided into:
 
-  - Net Throttle，这包括：
-    - ACCEPT 方向
-    - CONNECT 方向
-  - Emergency Throttle，这包括：
-    - 最大文件句柄控制部分
-    - 保留文件句柄用于 backdoor 的部分
+  - Net Throttle, this includes:
+    - ACCEPT direction
+    - CONNECT direction
+  - Emergency Throttle, which includes:
+    - Maximum file handle control section
+    - Keep the file handle for the part of the backdoor
 
-## 定义
+## definition
 
-由于 Throttle 的实现并不是一个类，因此分散在多个源代码文件中。下面的介绍中，为了方便，对顺序作了调整。
+Because Throttle's implementation is not a class, it is spread across multiple source code files. In the following introduction, the order is adjusted for convenience.
 
-### 常量和变量
+### Constants and variables
 
-首先是几个常量宏定义和枚举值：
+The first is a few constant macro definitions and enumeration values:
 
-```
+`` `
 source: P_UnixNet.h
-// 警告信息输出时，需要间隔 24小时 及以上，避免重复发送大量警告信息
+// When the warning message is output, it needs to be separated by 24 hours or more to avoid sending a large number of warning messages repeatedly.
 #define TRANSIENT_ACCEPT_ERROR_MESSAGE_EVERY HRTIME_HOURS(24)
-// 警告信息输出时，需要间隔 10秒 及以上，避免重复发送大量警告信息
+// When the warning message is output, it needs to be separated by 10 seconds or more to avoid sending a large number of warning messages repeatedly.
 #define NET_THROTTLE_MESSAGE_EVERY HRTIME_MINUTES(10)
 
-// 文件句柄保留数量，保留给Cache子系统。
+// The number of file handles reserved is reserved for the Cache subsystem.
 #define THROTTLE_FD_HEADROOM (128 + 64) // CACHE_DB_FDS + 64
 
-// 为何 ACCEPT 要预留 10% ？？？
+// Why is ACCEPT reserved for 10%? ? ?
 #define NET_THROTTLE_ACCEPT_HEADROOM 1.1  // 10%
 #define NET_THROTTLE_CONNECT_HEADROOM 1.0 // 0%
 
-// 在ACCEPT限定值发生时，连续放弃接下来的 5 个新连接，并向其发送连接达到限定值的信息
-// 这只有在开启“向客户端发送连接达到限定值信息”的功能时，才会生效，默认此功能是关闭的
+// When the ACCEPT limit value occurs, the next 5 new connections are continuously discarded, and the connection is sent to the limit value.
+// This only takes effect when the function "Send connection to the client reaches the limit value" is enabled. By default, this function is disabled.
 // also the 'throttle connect headroom'
 #define THROTTLE_AT_ONCE 5
 
-// 剩余文件描述符限定值
+// remaining file descriptor limit value
 #define EMERGENCY_THROTTLE 16
-// 剩余文件描述符紧急限定值
+// Remaining file descriptor emergency limit value
 #define HYPER_EMERGENCY_THROTTLE 6
 
-// 定义 Net Throttle 的类型：ACCEPT 和 CONNECT
+// Define the type of Net Throttle: ACCEPT and CONNECT
 enum ThrottleType {
   ACCEPT,
   CONNECT,
 };
-```
+`` `
 
-然后是几个相关的全局变量，根据初始化的顺序进行解释：
+Then there are several related global variables that are interpreted according to the order of initialization:
 
-```
+`` `
 source: UnixNet.cc
-// 操作系统对于文件打开数的限定(ATS对于文件打开总数的硬限定)
-//     其值受到配置项：proxy.config.system.file_max_pct 的影响，默认值为 90%
-//     为系统允许的最大文件打开数 * file_max_pct
-// 首先，调用 Main.cc:1535 init_system() 完成初始化：
+/ / The operating system limits the number of file open (ATS hard limit on the total number of file open)
+// its value is affected by the configuration item: proxy.config.system.file_max_pct, the default value is 90%
+// The maximum number of file openes allowed for the system * file_max_pct
+// First, call Main.cc:1535 init_system() to complete the initialization:
 //     fds_limit = ink_max_out_rlimit(RLIMIT_NOFILE, true, false);
-// 然后再调用 Main.cc:1538 adjust_sys_settings()：
-//     首先，根据 proxy.config.system.file_max_pct 进行调整，
-//     然后，根据 proxy.config.net.connections_throttle 进行再调整
-//     如 connections_throttle 超过 fds_limit - THROTTLE_FD_HEADROOM 值时会：
-//       尝试重设操作系统的文件打开数限定值为 connections_throttle，并更新 fds_limit 
-// 最后再调用 Main.cc:1664 check_fd_limit()：
-//     如果 fds_limit - THROTTLE_FD_HEADROOM 小于 1 时会抱错并停止ATS进程
-// 总之，fds_limit 为ATS能够打开的文件句柄数的最大值。
+// Then call Main.cc:1538 adjust_sys_settings():
+// First, adjust according to proxy.config.system.file_max_pct
+// Then, re-adjust according to proxy.config.net.connections_throttle
+// If connections_throttle exceeds the fds_limit - THROTTLE_FD_HEADROOM value:
+/ / Try to reset the operating system's file open limit value is connections_throttle, and update fds_limit 
+// Finally call Main.cc:1664 check_fd_limit():
+// If fds_limit - THROTTLE_FD_HEADROOM is less than 1, it will hold the error and stop the ATS process
+// In short, fds_limit is the maximum number of file handles that ATS can open.
 int fds_limit = 8000;
 
-// 当前允许的最大 Socket 句柄数（不包含backdoor，cache 文件句柄等）
-//     其值来自配置项：proxy.config.net.connections_throttle
-// 首先，调用 Main.cc:1711 ink_net_init()，由其再调用 Net.cc:43 configure_net()
-//     从配置文件中读取该值，
-//     并注册处理函数change_net_connections_throttle()，在此配置项变更时重设该值。
-// 然后再调用 Main.cc:1771 netProcessor.start()，由其调用 UnixNetProcessor.cc:405 change_net_connections_throttle()
-//     change_net_connections_throttle() 函数的实现可能有bug，
-//       它忽略了来自配置文件中的值
-//       而直接通过 fds_limit 来计算该值，因此 proxy.config.net.connections_throttle 不能热更新
+// The maximum number of Socket handles currently allowed (excluding backdoor, cache file handles, etc.)
+// its value comes from the configuration item: proxy.config.net.connections_throttle
+// First, call Main.cc:1711 ink_net_init(), which calls Net.cc:43 configure_net()
+// read the value from the configuration file,
+// And register the handler change_net_connections_throttle() to reset this value when this configuration item changes.
+// Then call Main.cc:1771 netProcessor.start(), which calls UnixNetProcessor.cc:405 change_net_connections_throttle()
+// The implementation of the change_net_connections_throttle() function may have bugs.
+// it ignores the value from the configuration file
+// and directly calculate this value via fds_limit, so proxy.config.net.connections_throttle cannot be hot updated
 int fds_throttle;
 
-// 当前允许的最大连接数，其值受到配置项：proxy.config.net.connections_throttle 的影响
-// 当配置项为 -1 时，会使用 fds_limit - THROTTLE_FD_HEADROOM 的值进行默认设置
-// 当配置项 >= 0 时，会使用 配置项 的值进行设置，但是其值仍然不能超过 fds_throttle 的值
+// The maximum number of connections currently allowed, whose value is affected by the configuration item: proxy.config.net.connections_throttle
+// When the configuration item is -1, the default value is set using the value of fds_limit - THROTTLE_FD_HEADROOM
+// When the configuration item >= 0, it will be set with the value of the configuration item, but its value still cannot exceed the value of fds_throttle
 int net_connections_throttle;
 
-// 用来记录上一次警告信息输出的时间，用来限制信息输出的频率
+// used to record the time of the last warning message output, used to limit the frequency of information output
 ink_hrtime last_throttle_warning;
 ink_hrtime last_shedding_warning;
 ink_hrtime emergency_throttle_time;
 ink_hrtime last_transient_accept_error;
-```
+`` `
 
-### 内部方法
+### Internal method
 
-```
+`` `
 source: P_UnixNet.h
-// PRIVATE: 这是一个 Throttle 内部方法
-// 根据统计值，计算出当前已经打开的连接数。
-// 但是对于 Net Throttle 的类型，会有一个保留值(惩罚值)：
-//   对于 ACCEPT 返回值会比实际打开的连接数多10%
-//     这里我理解为一种保险措施：
-//       只要控制住 ACCEPT 进来的连接数，那么就不会有过多的 CONNECT 连接出去，
-//       这样就可以在接近连接耗尽（10%余量的情况下）时，优先暂缓 ACCEPT 动作，
-//       由于ATS是一个PROXY，没有进来的连接，那么就几乎不会有 CONNECT 连接出去。
-//   对于 CONNECT 返回值为实际打开的连接数
+// PRIVATE: This is a Throttle internal method
+// Calculate the number of connections that are currently open based on the statistics.
+// But for Net Throttle types, there will be a reserved value (penalty value):
+// The return value for ACCEPT will be 10% more than the actual number of open connections
+// Here I understand as an insurance measure:
+// As long as you control the number of connections coming from ACCEPT, there will not be too many CONNECT connections.
+// This will give priority to the ACCEPT action when the connection is exhausted (10% margin).
+// Since ATS is a PROXY and there are no incoming connections, there will be almost no CONNECT connection.
+// For CONNECT return value is the number of connections actually opened
 TS_INLINE int
 net_connections_to_throttle(ThrottleType t)
 {
   double headroom = t == ACCEPT ? NET_THROTTLE_ACCEPT_HEADROOM : NET_THROTTLE_CONNECT_HEADROOM;
-  int64_t sval    = 0;
+  int64_t cool = 0;
 
   NET_READ_GLOBAL_DYN_SUM(net_connections_currently_open_stat, sval);
   int currently_open = (int)sval;
@@ -125,30 +125,30 @@ net_connections_to_throttle(ThrottleType t)
   return (int)(currently_open * headroom);
 }
 
-// PRIVATE: 这是一个 Throttle 内部方法
-//   目前仅由 check_net_throttle() 调用
-// 用来判定当前是否处于正在限制连接的时刻
-// 返回值：
-//   true: 当前正在限制新建连接中
-//  false: 当前未对新建连接进行限制
+// PRIVATE: This is a Throttle internal method
+// Currently only called by check_net_throttle()
+/ / is used to determine whether the current time is limiting the connection
+// return value:
+// true: currently restricting new connections
+// false: no new connections are currently restricted
 TS_INLINE bool
 emergency_throttle(ink_hrtime now)
 {
   return (bool)(emergency_throttle_time > now);
 }
-```
+`` `
 
-### 外部方法
+### external method
 
-```
+`` `
 source: P_UnixNet.h
-// PUBLIC: 这是提供给 IOCore Net Subsystem 的 Interface
-// 用于检测当前的 Throttle 状态
-//   首先判定已经打开的网络连接是否超过限制（根据ACCEPT／CONNECT类型分别加权判定）
-//   同时还要检测当前是否处于 Throttle 状态。
-// 返回值：
-//   true: 已经达到 Throttle 状态
-//  false: 未达到 Throttle 状态
+// PUBLIC: This is the Interface provided to IOCore Net Subsystem
+/ / used to detect the current Throttle state
+// First determine if the network connection that has been opened exceeds the limit (weighted according to ACCEPT/CONNECT type)
+// Also check if it is currently in the Throttle state.
+// return value:
+// true: Throttle status has been reached
+// false: Throttle status not reached
 TS_INLINE bool
 check_net_throttle(ThrottleType t, ink_hrtime now)
 {
@@ -174,25 +174,25 @@ check_net_throttle(ThrottleType t, ink_hrtime now)
 // descriptors.  Close the connection immediately, the upper levels
 // will recover.
 //
-// PUBLIC: 这是提供给 IOCore Net Subsystem 的 Interface
-// 用于检测传入的文件句柄是否已经接近耗尽值
-// 在 ATS 中主要由两类文件句柄的消耗：
-//   网络连接（包含Client与ATS之间的连接 和 ATS与Origin Server之间的连接）
-//   磁盘访问（这包含 CACHE_DB_FDS 128个 文件句柄，还有 64个 保留文件句柄）
-// 而对于文件句柄的限制，也分为两个层级：
-//   第一层级，可用文件句柄数量小于 16，为 EMERGENCY_THROTTLE
-//     触发该等级时，会设置 emergency_throttle_time，这样整个ATS会暂停创建新连接一段时间
-//   第二层级，可用文件句柄数量小于  6，为 HYPER_EMERGENCY_THROTTLE
-//     在执行第一层级动作的基础上，还会直接关闭这个文件句柄
-// 该函数使用文件句柄是一个 int 类型的字增长变量的特性实现对剩余可用文件句柄的判定
-// 返回值：
-//   true：达到文件句柄耗尽限制（文件句柄可能被关闭）
-//  false：未达限制
-// 暂停时间：
-//   首先，计算出当剩余可用文件句柄低于 EMERGENCY_THROTTLE（16） 值多少，保存到 over 变量。
-//   例如，当前可用文件句柄为10，这样 over 值为 16 - 10 ＝ 6
-//   则暂停时间为 over * over = 6 * 6 = 36 秒
-//   将当前时间加上36秒之后，保存到 emergency_throttle_time，在到达该时间之前都不会创建新连接。
+// PUBLIC: This is the Interface provided to IOCore Net Subsystem
+/ / Used to detect if the incoming file handle is close to the exhausted value
+/ / In the ATS mainly by the consumption of two types of file handles:
+// Network connection (including the connection between Client and ATS and the connection between ATS and Origin Server)
+// disk access (this includes 128 file handles for CACHE_DB_FDS and 64 reserved file handles)
+// The restrictions on file handles are also divided into two levels:
+// The first level, the number of available file handles is less than 16, for EMERGENCY_THROTTLE
+// When this level is triggered, emergency_throttle_time is set so that the entire ATS will pause creating a new connection for a while.
+// The second level, the number of available file handles is less than 6, which is HYPER_EMERGENCY_THROTTLE
+/ / on the basis of the implementation of the first level of action, will also directly close the file handle
+// This function uses the file handle to be a feature of a word-growth variable of type int to implement the decision on the remaining available file handles.
+// return value:
+// true: the file handle exhaustion limit is reached (the file handle may be closed)
+// false: no limit
+// Pause time:
+// First, calculate the value of the remaining available file handles below the EMERGENCY_THROTTLE(16) value and save it to the over variable.
+// For example, the currently available file handle is 10, so the over value is 16 - 10 = 6
+// The pause time is over * over = 6 * 6 = 36 seconds
+// Add the current time to 36 seconds and save to emergency_throttle_time. No new connections will be created until this time is reached.
 TS_INLINE bool
 check_emergency_throttle(Connection &con)
 {
@@ -209,15 +209,15 @@ check_emergency_throttle(Connection &con)
   }
   return false;
 }
-```
+`` `
 
-### 加载配置项
+### Loading configuration items
 
-```
-// PUBLIC: 这是提供给 IOCore Net Subsystem 的 Interface
-// 用来更新 net_connections_throttle 值
-// 在配置文件更新之后，重设 net_connections_throttle 的值
-// 但是这里好像有 bug，这里并未接受传入的值，而是根据 fds_limit 值进行了计算。
+`` `
+// PUBLIC: This is the Interface provided to IOCore Net Subsystem
+/ / used to update the net_connections_throttle value
+// Reset the value of net_connections_throttle after the configuration file is updated
+// But there seems to be a bug here. The value passed in is not accepted here, but is calculated based on the fds_limit value.
 TS_INLINE int
 change_net_connections_throttle(const char *token, RecDataT data_type, RecData value, void *data)
 {
@@ -235,20 +235,20 @@ change_net_connections_throttle(const char *token, RecDataT data_type, RecData v
   }
   return 0;
 }
-```
+`` `
 
-### 错误判定与警告信息输出
+### Error determination and warning message output
 
-```
+`` `
 source: P_UnixNet.h
-// PUBLIC: 这是提供给 IOCore Net Subsystem 的 Interface
-// 针对 accept() 的错误状态进行判定
-// 参数：
-//   res 在 accept() 返回值小于 0 时，取 errno 值。
-// 返回值：
-//   1: 继续重试
-//   0: 输出警告，可以重试
-//  -1: 严重错误
+// PUBLIC: This is the Interface provided to IOCore Net Subsystem
+// Determine the error status of accept()
+// Parameters:
+// res takes the errno value when the return value of accept() is less than 0.
+// return value:
+// 1: Continue to try again
+// 0: Output warning, you can try again
+// -1: Serious error
 // 1  - transient
 // 0  - report as warning
 // -1 - fatal
@@ -274,7 +274,7 @@ accept_error_seriousness(int res)
   case -ENFILE:
 #endif
     return 0;
-  case -EINTR:
+  case-EINTR:
     ink_assert(!"should be handled at a lower level");
     return 0;
 #if defined(EPROTO) && !defined(freebsd)
@@ -289,8 +289,8 @@ accept_error_seriousness(int res)
   }
 }
 
-// PUBLIC: 这是提供给 IOCore Net Subsystem 的 Interface
-// 输出 accept() 时遇到的错误信息，并限制错误信息的输出频率（24小时）
+// PUBLIC: This is the Interface provided to IOCore Net Subsystem
+// Error message encountered when output accept() is output, and limit the output frequency of error message (24 hours)
 TS_INLINE void
 check_transient_accept_error(int res)
 {
@@ -305,10 +305,10 @@ check_transient_accept_error(int res)
   }
 }
 
-// PUBLIC: 这是提供给 IOCore Net Subsystem 的 Interface
-// 避免输出大量重复的“连接已达到溢出限定值”的警告信息
-// * 这个方法没有任何地方使用
-// 限制输出“number of connections reaching shedding limit”警告信息的时间间隔为 10 秒及以上
+// PUBLIC: This is the Interface provided to IOCore Net Subsystem
+/ / Avoid output a large number of repeated "connection has reached the overflow limit value" warning message
+// * This method is not used anywhere
+/ / Limit the output of the "number of connections reaching shedding limit" warning message interval of 10 seconds and above
 TS_INLINE void
 check_shedding_warning()
 {
@@ -319,9 +319,9 @@ check_shedding_warning()
   }
 }
 
-// PUBLIC: 这是提供给 IOCore Net Subsystem 的 Interface
-// 避免输出大量重复的“连接已达限定值”的警告信息
-// 限制输出“too many connections, throttling”警告信息的时间间隔为 10 秒及以上
+// PUBLIC: This is the Interface provided to IOCore Net Subsystem
+/ / Avoid output a large number of repeated "connection has reached the limit value" warning message
+/ / Limit the output of "too many connections, throttling" warning message interval of 10 seconds and above
 TS_INLINE void
 check_throttle_warning()
 {
@@ -331,20 +331,20 @@ check_throttle_warning()
     RecSignalWarning(REC_SIGNAL_SYSTEM_ERROR, "too many connections, throttling");
   }
 }
-```
+`` `
 
-### 输出警告信息到客户端
+### Output warning message to the client
 
-```
+`` `
 source: UnixNetAccept.cc
-// PUBLIC: 这是提供给 IOCore Net Subsystem 的 Interface
-// 当开启了 throttle_error_message 功能（开启此功能的代码已经不见了）后，遇到 Throttle 状态时：
-//   ATS会连续 accept() 最多 THROTTLE_AT_ONCE 个连接
-//   主动向这些连接发送 throttle_error_message 内的信息
-//   最后关闭这些连接
-//   同时阻塞 accept 操作 proxy.config.net.throttle_delay 毫秒，默认值为：50毫秒
-// 如果没有开启（当前默认值）
-//   则不会调用此方法，而只是简单的阻塞 accept 操作
+// PUBLIC: This is the Interface provided to IOCore Net Subsystem
+// When the throttle_error_message function is enabled (the code to enable this feature is gone), when the Throttle state is encountered:
+// ATS will continue accept() up to THROTTLE_AT_ONCE connections
+// Proactively send information within the throttle_error_message to these connections
+// Finally close these connections
+/ / Block the accept operation proxy.config.net.throttle_delay milliseconds at the same time, the default value is: 50 milliseconds
+// If not enabled (current default)
+// will not call this method, but simply block the accept operation
 //
 // Send the throttling message to up to THROTTLE_AT_ONCE connections,
 // delaying to let some of the current connections complete
@@ -364,7 +364,7 @@ send_throttle_message(NetAccept *na)
     int res = 0;
     if ((res = na->server.accept(&con[n])) < 0)
       return res;
-    n++;
+    n ++;
   }
   safe_delay(net_throttle_delay / 2); 
   int i = 0;
@@ -377,30 +377,30 @@ send_throttle_message(NetAccept *na)
     con[i].close();
   return 0;
 }
-```
+`` `
 
-## Throttle 的实现
+## Throttle's implementation
 
-由于在 缓存子系统 中总是使用固定数量的文件句柄，而 ATS 又为其它系统（如日志）保留了 64 个文件句柄（这64个保留的文件句柄的用途还需要再确认），这样可能使用到大量文件句柄的就只有 网络子系统 了。
+Since a fixed number of file handles are always used in the cache subsystem, ATS reserves 64 file handles for other systems (such as logs) (the use of these 64 reserved file handles needs to be reconfirmed), which may be used Only a network subsystem is available to a large number of file handles.
 
-Throttle 在网络子系统中分成两个部分来实现：
+Throttle is implemented in two parts in the network subsystem:
 
-  - NetAccept 接受新连接之后，对 Throttle 进行判断
-  - connectUp 在创建一个文件描述符用于connect()之前，对 Throttle 进行判断
+  - NetAccept judges Throttle after accepting a new connection
+  - connectUp judges Throttle before creating a file descriptor for connect()
 
-这部分的实现，在 6.0.x 分支上有一个bug：TS-4879，由于 check_emergency_throttle() 在极限情况下会直接关闭文件句柄，但是在代码中没有处理这个状况，而且继续使用已经被关闭的文件句柄创建了NetVC，由此导致这个NetVC只能被缺省的超时控制来管理，导致NetVC在较长的时间里不关闭。
+This part of the implementation, there is a bug on the 6.0.x branch: TS-4879, because check_emergency_throttle() will close the file handle directly in the limit case, but this condition is not handled in the code, and continue to use the file that has been closed The handle creates NetVC, which causes the NetVC to be managed only by the default timeout control, causing NetVC to not shut down for a longer period of time.
 
-下面采用修复后的代码进行分析：
+The following uses the repaired code for analysis:
 
-## 在 NetAccept 中的实现
+## Implementation in NetAccept
 
-NetAccept 有多种运行模式，首先分析在 Dedicated EThread 中以 blocking accept 方式运行的：
+NetAccept has several modes of operation. First, it analyzes the operation of blocking accept in Dedicated EThread:
 
-```
+`` `
 int
 NetAccept::do_blocking_accept(EThread *t) 
 {
-  int res                = 0;
+  int res = 0;
   int loop               = accept_till_done;
   UnixNetVConnection *vc = NULL;
   Connection con;
@@ -411,36 +411,36 @@ NetAccept::do_blocking_accept(EThread *t)
     ink_hrtime now = Thread::get_hrtime();
 
     // Throttle accepts
-    // 对于 backdoor 服务不进行限制，
-    //   由于 backdoor 用于实现 traffic_server 与 traffic_manager 之间的心跳，因此必须保证其服务的可用性。
-    // 然后判断 ACCEPT 方向是否已经达到连接限制，或者处于文件描述符限制的状态
+    // There are no restrictions on the backdoor service.
+    // Since backdoor is used to implement the heartbeat between traffic_server and traffic_manager, the availability of its services must be guaranteed.
+    // Then determine if the ACCEPT direction has reached the connection limit or is in the state of the file descriptor limit
     while (!backdoor && check_net_throttle(ACCEPT, now)) {
-      // 已经达到限制
-      // 输出警告信息
+      // has reached the limit
+      // output warning message
       check_throttle_warning();
-      // 未设置 throttle_error_message （默认）
+      // throttle_error_message is not set (default)
       if (!unix_netProcessor.throttle_error_message) {
-        // 阻塞 net_throttle_delay 毫秒
-        // 由于 do_blocking_accept() 运行在 Dedicated EThread 中，因此不会阻塞
+        // blocking net_throttle_delay milliseconds
+        // Since do_blocking_accept() runs in Dedicated EThread, it does not block
         safe_delay(net_throttle_delay);
       } else if (send_throttle_message(this) < 0) {
-        // 否则，发送 throttle_error_message
+        // Otherwise, send throttle_error_message
         goto Lerror;
       }
-      // 更新 now 值用于 check_net_throttle
+      // update the now value for check_net_throttle
       now = Thread::get_hrtime();
     }   
 
     if ((res = server.accept(&con)) < 0) {
-    Lerror:
-      // 接受新连接失败时，限制错误信息的输出频率
+    Learner:
+      // Limit the output frequency of error messages when accepting a new connection failure
       int seriousness = accept_error_seriousness(res);
-      // 遇到不严重的错误，如EAGAIN等
+      // encountered a serious error, such as EAGAIN, etc.
       if (seriousness >= 0) { // not so bad
-        // 如果需要发送警告信息
+        // If you need to send a warning message
         if (!seriousness)     // bad enough to warn about
           check_transient_accept_error(res);
-        // 阻塞 net_throttle_delay 毫秒，以节省CPU占用
+        // Block net_throttle_delay milliseconds to save CPU usage
         safe_delay(net_throttle_delay);
         return 0;
       }   
@@ -452,11 +452,11 @@ NetAccept::do_blocking_accept(EThread *t)
       return -1;
     }
 
-    // 由于是阻塞方式 accept() 在 accept() 之前判断的连接限定值可能已经是很久之前的事情了
-    // 所以当我们拿到一个合理连接时仍然需要根据 FD 的值判定它是否超出了文件描述符限制
+    / / Because the blocking method accept () connection limit value judged before accept () may have been a long time ago
+    // So when we get a reasonable connection we still need to determine if it exceeds the file descriptor limit based on the value of FD
     // The con.fd may exceed the limitation of check_net_throttle() because we do blocking accept here.
     if (check_emergency_throttle(con)) {
-      // 如果超出了限制，还需要检查这个 FD 是否已经被关闭了
+      // If the limit is exceeded, you also need to check if the FD has been closed.
       // The `con' could be closed if there is hyper emergency
       if (con.fd == NO_FD) {
         return 0;
@@ -470,12 +470,12 @@ NetAccept::do_blocking_accept(EThread *t)
 
   return 1;
 }
-```
+`` `
 
-然后再分析在 Regular EThread 中以non-blocking accept模式运行：
+Then analyze the non-blocking accept mode in Regular EThread:
 
-```
-// 通过周期性Event，acceptFastEvent 被周期性回调
+`` `
+// Through the periodic Event, acceptFastEvent is periodically called back
 int   
 NetAccept::acceptFastEvent(int event, void *ep)
 {   
@@ -490,14 +490,14 @@ NetAccept::acceptFastEvent(int event, void *ep)
   int loop               = accept_till_done;
     
   do {
-    // 对于 backdoor 服务不进行限制，
-    //   由于 backdoor 用于实现 traffic_server 与 traffic_manager 之间的心跳，因此必须保证其服务的可用性。
-    // 然后判断 ACCEPT 方向是否已经达到连接限制
-    // 注意，这里对文件描述符限制状态的判定可能不够准确
+    // There are no restrictions on the backdoor service.
+    // Since backdoor is used to implement the heartbeat between traffic_server and traffic_manager, the availability of its services must be guaranteed.
+    // Then determine if the ACCEPT direction has reached the connection limit
+    // Note that the determination of the file descriptor limit status may not be accurate enough here.
     if (!backdoor && check_net_throttle(ACCEPT, Thread::get_hrtime())) {
-      // ifd 这个成员好像没用了
+      // ifd this member seems useless
       ifd = NO_FD;
-      // 连接被限定时直接返回到 EventSystem
+      // Return directly to EventSystem when the connection is restricted
       return EVENT_CONT;
     }
 
@@ -510,32 +510,32 @@ NetAccept::acceptFastEvent(int event, void *ep)
       res = -errno;
       if (res == -EAGAIN || res == -ECONNABORTED
 #if defined(linux)
-          || res == -EPIPE
+          || nothing == -EPIPE
 #endif
           ) {
         goto Ldone;
       } else if (accept_error_seriousness(res) >= 0) {
-        // 接受新连接失败时，限制错误信息的输出频率
+        // Limit the output frequency of error messages when accepting a new connection failure
         check_transient_accept_error(res);
-        // 这里没有阻塞，跳转到 Ldone 后直接返回到 EventSystem 等待下一次回调
-        // 每次被回调时，首先会检查是否处于连接限定的状态
+        // There is no blocking here. After jumping to Ldone, return directly to EventSystem and wait for the next callback.
+        // Each time you are called back, you will first check if it is in the connection-limited state.
         goto Ldone;
       }
       if (!action_->cancelled)
         action_->continuation->handleEvent(EVENT_ERROR, (void *)(intptr_t)res);
       goto Lerror;
     }
-    // 在创建VC之前，没有再次通过 check_emergency_throttle 来判断状态 FD，
-    // 这是因为：
-    //   我们在非阻塞accept()调用，从判定连接限制到accept()调用之间只有非常短的时间，没有很大的必要性
-    //   虽然在多线程的环境下，但是对同一端口进行accept()调用的所有 NetAccept 都共享同一个 mutex
-    //   每接受一个新连接，就会检查一次连接限定
-    // 但是这里也存在隐患：同时会有其它端口同时进行 accept() 调用。
-    // 由于没有调用 check_emergency_throttle：
-    //   在接受新连接之后，并未对 FD 进行检查，也就无法对 emergency_throttle_time 进行更新
-    //   因此，emergency_throttle_time 的更新仅仅在 connectUp 中进行更新
-    // 由于 check_net_throttle 对于 ACCEPT 方向有 10% 的预留，因此：
-    //   在 accept() 返回一个 FD 时，距离文件描述符的限定还有 10% 的余量
+    // Before the VC is created, the status FD is not judged again by check_emergency_throttle.
+    // This is because:
+    // We have a very short time between the decision to connect to the accept() call in the non-blocking accept() call, there is no great need
+    // Although in a multi-threaded environment, all NetAccepts that make an accept() call to the same port share the same mutex
+    // Every time a new connection is accepted, the connection limit is checked
+    // But there are also hidden dangers: there will be other ports that make accept() calls at the same time.
+    // Since check_emergency_throttle is not called:
+    // After accepting the new connection, the FD is not checked and the emergency_throttle_time cannot be updated.
+    // Therefore, the update of emergency_throttle_time is only updated in connectUp
+    // Since check_net_throttle has a 10% reservation for the ACCEPT direction, therefore:
+    // When accept() returns an FD, there is a 10% margin from the limit of the file descriptor.
     vc = (UnixNetVConnection *)this->getNetProcessor()->allocate_vc(e->ethread);
 ...
   } while (loop);
@@ -543,7 +543,7 @@ NetAccept::acceptFastEvent(int event, void *ep)
 Ldone:
   return EVENT_CONT;
 
-Lerror:
+Learner:
   server.close();
   e->cancel();
   if (vc)
@@ -552,35 +552,35 @@ Lerror:
   delete this;
   return EVENT_DONE;
 }
-```
+`` `
 
-### 在 connectUp 中的实现
+### Implementation in connectUp
 
-```
+`` `
 int
 UnixNetVConnection::connectUp(EThread *t, int fd)
 {
   int res; 
 
   thread = t;
-  // 首先判断 CONNECT 方向是否已经达到连接限制，或者处于文件描述符限制的状态
+  / / First determine whether the CONNECT direction has reached the connection limit, or in the state of the file descriptor limit
   if (check_net_throttle(CONNECT, submit_time)) {
-    // 已经达到限制
-    // 输出警告信息
+    // has reached the limit
+    // output warning message
     check_throttle_warning();
-    // 回掉状态机 NET_EVENT_OPEN_FAILED 事件
+    // Return the state machine NET_EVENT_OPEN_FAILED event
     action_.continuation->handleEvent(NET_EVENT_OPEN_FAILED, (void *)-ENET_THROTTLING);
     free(t);
     return CONNECT_FAILURE;
   }
 ...
-  // 接下来判断文件描述符是否已经打开了
-  // 如果是从TS API发起的请求，应该传入一个已经打开的文件描述符
+  // Next, determine if the file descriptor is already open.
+  // If it is a request initiated from the TS API, it should pass in an already opened file descriptor
   // If this is getting called from the TS API, then we are wiring up a file descriptor
   // provided by the caller. In that case, we know that the socket is already connected.
   if (fd == NO_FD) {
-    // 如果没有打开，则立即创建一个
-    // 由于是多线程的环境，因此即使在前面判断过，在打开一个文件描述符之后，仍然可能出现超出限定的问题
+    // If not open, create one now
+    // Because it is a multi-threaded environment, even after judging it, after opening a file descriptor, there may still be problems beyond the limit.
     // Due to multi-threads system, the fd returned from con.open() may exceed the limitation of check_net_throttle().
     res = con.open(options);
     if (res != 0) {
@@ -599,10 +599,10 @@ UnixNetVConnection::connectUp(EThread *t, int fd)
     con.is_bound     = true;
   }
 
-  // 因此，需要再次调用 check_emergency_throttle 来验证这个文件描述符是否超出了限定
+  // Therefore, you need to call check_emergency_throttle again to verify that the file descriptor is out of bounds
   if (check_emergency_throttle(con)) {
-    // 如果返回 true，则表示超出限定值，同时设置了惩罚时间，此时 accept 会被暂停一段时间
-    //   我们需要进一步判定该 FD 是否被关闭
+    // If true is returned, the limit value is exceeded and the penalty time is set, at which point accept will be suspended for a while.
+    // We need to further determine if the FD is closed
     // The `con' could be closed if there is hyper emergency
     if (con.fd == NO_FD) {
       // We need to decrement the stat because close_UnixNetVConnection only decrements with a valid connection descriptor.
@@ -612,7 +612,7 @@ UnixNetVConnection::connectUp(EThread *t, int fd)
       res   = -errno;
       goto fail;
     }
-    // 如果已经达到限定值，但是该连接并未被关闭，仍然可以继续使用该连接
+    // If the limit has been reached, but the connection is not closed, you can still continue to use the connection
   }
 
   // Must connect after EventIO::Start() to avoid a race condition
@@ -631,39 +631,39 @@ UnixNetVConnection::connectUp(EThread *t, int fd)
   }
 ...
 }
-```
+`` `
 
-可以看到在 CONNECT 方向上没有执行 safe_delay() 的操作，这是因为：
+You can see that there is no safe_delay() operation in the CONNECT direction because:
 
-  - safe_delay() 是一个阻塞操作
-  - 当状态机遇到 NET_EVENT_OPEN_FAILED 时，错误代码为 -ENET_THROTTLING 时应该执行 reschedule 操作
+  - safe_delay() is a blocking operation
+  - When the state machine encounters NET_EVENT_OPEN_FAILED, the reschedule operation should be performed when the error code is -ENET_THROTTLING
 
 ### THROTTLE_FD_HEADROOM 限定
 
-这是 ATS 为了非网络通信而保留的文件描述符，注释中解释了：
+This is the file descriptor that ATS retains for non-network communication. The comments explain:
 
-  - 128 来自 CACHE_DB_FDS
-  - 64 没有解释，这里姑且认为是 Other
+  - 128 from CACHE_DB_FDS
+  - 64 No explanation, here I think it is Other
 
-我查找了 CACHE_DB_FDS 的定义：
+I looked up the definition of CACHE_DB_FDS:
 
-```
+`` `
 cache/I_CacheDefs.h:#define CACHE_DB_FDS 128
-```
+`` `
 
-但是却没有找到任何地方使用了这个宏，与社区中其它开发者进行讨论之后：
+But I haven't found any place to use this macro after discussing it with other developers in the community:
 
-  - 每个硬盘 8 个文件描述符
-    - 随源代码发布的缺省配置文件records.config里面 proxy.config.cache.threads_per_disk INT 8
-    - 但是源代码里缺省为 12，如果在records.config里面没有定义该配置项则为 12
-  - 早期的硬件环境是 SCSI 硬盘
-    - 每个SCSI通道最多可以连接 16 块磁盘
+  - 8 file descriptors per hard disk
+    - Proxy.config.cache.threads_per_disk INT 8 in the default configuration file records.config released with the source code
+    - But the default is 12 in the source code. If the configuration item is not defined in records.config, it is 12
+  - Early hardware environment was SCSI hard disk
+    - Up to 16 disks can be connected per SCSI channel
 
-因此，用于CACHE_DB的文件描述符数量为：8 * 16 ＝ 128。
+Therefore, the number of file descriptors for CACHE_DB is: 8 * 16 = 128.
 
-对于另外 64 个文件描述符的用途，目前还不清楚，猜测可能与DNS、日志系统有关系。
+For the purpose of the other 64 file descriptors, it is still unclear. The guess may be related to the DNS and the log system.
 
-## 参考资料
+## References
 
 - [P_UnixNet.h](http://github.com/apache/trafficserver/tree/master/iocore/net/P_UnixNet.h)
 - [UnixNet.cc](http://github.com/apache/trafficserver/tree/master/iocore/net/UnixNet.cc)

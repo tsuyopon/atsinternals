@@ -293,7 +293,7 @@ The close method seems to have only the dns system call, and other systems don't
   - Server.close() is called directly at the Lerror tag of acceptFastEvent. The listen fd is not deleted from epoll fd. It looks like a small bug???
   - In the cancel, server.close() is also called directly, and the listen fd is not deleted from the epoll fd.
 
-## 参考资料
+## Reference material
 
 - man 2 poll
 - man 2 epoll_wait

@@ -1,38 +1,38 @@
-# 基础组件：Connection
+# Base component: Connection
 
-用于定义一个网络连接和 Client 端。
+Used to define a network connection and client side.
 
-# 定义
+# definition
 
-```
+`` `
 struct Connection {
-  SOCKET fd;         ///< 该连接的 fd 描述符，其实是 int 类型
-  IpEndpoint addr;   ///< 关联的地址信息
-  bool is_bound;     ///< True＝已经与本地IP地址进行了bind操作，通常指调用了Connection::open()方法，而不是listen时的bind()操作
-  bool is_connected; ///< True＝已经建立了链接，通常指调用了Connection::connect()方法，对于非阻塞IO，连接可能还在建立中
-  int sock_type;     ///< 如果是UDP连接：SOCK_DGRAM，如果是TCP链接：SOCK_STREAM
+  SOCKET fd; ///< The fd descriptor of the connection is actually an int type
+  IpEndpoint addr; ///< associated address information
+  Bool is_bound; ///< True= has been done with the local IP address, usually refers to the Connection::open () method, rather than the bind () operation when listen
+  Bool is_connected; ///< True=A link has been established, usually referring to the Connection::connect() method. For non-blocking IO, the connection may still be established.
+  Int sock_type; ///< If it is a UDP connection: SOCK_DGRAM, if it is a TCP link: SOCK_STREAM
 
-  // 创建并初始化一个 socket 句柄/描述字
-  //     可以传入一个NetVCOptions类型的参数，来设置此 socket 的一些特性，
-  //     传递给 connect() 方法时要传递 '同一个' NetVCOptions类型的参数
+  / / Create and initialize a socket handle / description word
+  // You can pass a parameter of type NetVCOptions to set some features of this socket.
+  // Pass the 'same' NetVCOptions type parameter when passing to the connect() method
   //     ALL：TPROXY，sendbuf，revcbuf，call apply_options(opt)
-  // 返回 0 表示成功，
-  // 小于 0 表示失败，其值为 -ERRNO
+  // return 0 for success,
+  // Less than 0 means failure, its value is -ERRNO
   int open(NetVCOptions const &opt = DEFAULT_OPTIONS ///< Socket options.
            );
 
-  // 使用 socket 句柄/描述字，向指定的 IP:PORT 发起连接
-  //     通过sockaddr类型参数执行想要连接的目标IP和PORT
-  //     通过NetVCOptions类型的参数，来设置此连接是 '阻塞' 还是 '非阻塞'
-  //     传递给 open() 方法时要传递 '同一个' NetVCOptions类型的参数
-  // 返回 0 表示成功，
-  // 小于 0 表示失败，其值为 -ERRNO
+  / / Use the socket handle / description word to initiate a connection to the specified IP:PORT
+  // Execute the target IP and PORT to connect by the sockaddr type parameter
+  // Set the connection to be 'blocking' or 'non-blocking' by using the NetVCOptions type parameter.
+  // Pass the 'same' NetVCOptions type parameter when passing to the open() method
+  // return 0 for success,
+  // Less than 0 means failure, its value is -ERRNO
   int connect(sockaddr const *to,                       ///< Remote address and port.
               NetVCOptions const &opt = DEFAULT_OPTIONS ///< Socket options
               );
 
-  // 设置内部使用的 socket 地址结构成员
-  // 仅用于 ICP
+  / / Set the socket address structure member used internally
+  // For ICP only
   void
   setRemote(sockaddr const *remote_addr ///< Address and port.
             )
@@ -40,73 +40,73 @@ struct Connection {
     ats_ip_copy(&addr, remote_addr);
   }
 
-  // 设置 MultiCast 的 send
+  / / Set the Send of MultiCast
   int setup_mc_send(sockaddr const *mc_addr, sockaddr const *my_addr, bool non_blocking = NON_BLOCKING, unsigned char mc_ttl = 1,
                     bool mc_loopback = DISABLE_MC_LOOPBACK, Continuation *c = NULL);
 
-  // 设置 MultiCast 的 receive
+  // Set the Receive of MultiCast
   int setup_mc_receive(sockaddr const *from, sockaddr const *my_addr, bool non_blocking = NON_BLOCKING, Connection *sendchan = NULL,
                        Continuation *c = NULL);
 
-  // 关闭之前 open() 创建的 socket 句柄/描述字
-  // 返回 0 表示成功，
-  // 小于 0 表示失败，其值为 -ERRNO
+  // Close the socket handle/descriptor created by open()
+  // return 0 for success,
+  // Less than 0 means failure, its value is -ERRNO
   int close(); // 0 on success, -errno on failure
 
-  // 设置特殊参数
+  / / Set special parameters
   //     TCP：SOCK_OPT_NO_DELAY，SOCK_OPT_KEEP_ALIVE，SOCK_OPT_LINGER_ON
   //     ALL：SO_MARK，IP_TOS/IPV6_TCLASS
   void apply_options(NetVCOptions const &opt);
 
-  // 析构函数
-  // 调用close() 关闭 socket
+  // Destructor
+  // call close() to close the socket
   // 重置成员：fd=NO_FD，is_bound=false，is_connected=false
   virtual ~Connection();
   
-  // 构造函数
-  // 初始化成员：fd=NO_FD，is_bound=false，is_connected=false，sock_type=0，addr内存区域填充0
+  // Constructor
+  // Initialize members: fd=NO_FD, is_bound=false, is_connected=false, sock_type=0, addr memory area padding 0
   Connection();
 
-  // NetVCOptions类型的默认值（静态常量，只读）
-  // 成员由构造函数调用NetVCOptions::reset()来完成默认值的初始化(P_UnixNetVConnection.h)
+  / / NetVCOptions type default value (static constant, read only)
+  // The member is called by the constructor to call NetVCOptions::reset() to complete the initialization of the default value (P_UnixNetVConnection.h)
   static NetVCOptions const DEFAULT_OPTIONS;
 
 protected:
-  // 清理函数：与cleaner类模版配合使用
-  // 调用close() 关闭 socket
+  // Cleanup function: used with the cleaner class template
+  // call close() to close the socket
   void _cleanup();
 };
-```
+`` `
 
-## 关于 UnixConnection.cc中的 cleaner模版
+## About the cleaner template in UnixConnection.cc
 
-在 [UnixConnection.cc](https://github.com/apache/trafficserver/tree/master/iocore/net/UnixConnection.cc) 中定义了一个cleaner的模版类：
+A cleaner template class is defined in [UnixConnection.cc] (https://github.com/apache/trafficserver/tree/master/iocore/net/UnixConnection.cc):
 
-```
-// 由于使用了 未命名命名空间 的定义，因此这个 cleaner模版 只能在 UnixConnection.cc 中使用
+`` `
+// This cleaner template can only be used in UnixConnection.cc because of the definition of an unnamed namespace
 namespace
 {
- /* 这是一个为了方便资源清理的结构
-    通常 method 是 object 析构的时候调用的清理并释放资源的方法
-    但是可以通过 cleaner::reset 方法来避免在析构时调用 method 方法。
-    这种特性在 分配，检查，返回 的流程设计中可能没什么用处，
-    但是对于以下情况却很有用处：
-      - 有多个资源 （每一种都可以有自己的资源清理方法）
-      - 有多个检查点
-    此时，可以在 分配 的时候创建一个cleaner，就不用在所有需要的地方都检查资源的情况了
-        如果创建成功就调用 reset 方法，这个分支通常在代码里只有一处
-        否则就执行正常的析构函数，释放资源
-    例子：
+ /* This is a structure to facilitate resource cleanup
+    Usually method is a method called to clean up and release resources when object is destructed.
+    However, the cleaner::reset method can be used to avoid calling the method method during destructuring.
+    This feature may not be useful in the process of assigning, checking, and returning processes.
+    But it is useful for the following situations:
+      - There are multiple resources (each can have its own resource cleanup method)
+      - Multiple checkpoints
+    At this point, you can create a cleaner at the time of allocation, so you don't have to check the resources in all the places you need.
+        If the creation method is successful, the reset method is called. This branch usually has only one place in the code.
+        Otherwise, the normal destructor is executed, releasing resources.
+    example:
     self::some_method (...) {
-      // 分配 资源
+      // Allocating resources
       cleaner<self> clean_up(this, &self::cleanup);
-      // 修改 或 检查 资源
+      // Modify or check resources
       if (fail)
-        return FAILURE; // 失败，自动调用 cleanup()，资源被释放
-      // 成功
-      clean_up.reset(); // 调用reset()方法阻止析构，cleanup() 就不会被调用了
+        Return FAILURE; // Failed, automatically calls cleanup(), the resource is released
+      // Success
+      Clean_up.reset(); // Call the reset() method to prevent the destruction, and cleanup() will not be called.
       return SUCCESS;
-  */
+  * /
 template <typename T> struct cleaner {
   T *obj;                      ///< Object instance.
   typedef void (T::*method)(); ///< Method signature.
@@ -125,70 +125,70 @@ template <typename T> struct cleaner {
   }
 };
 }
-```
+`` `
 
 
-# 基础组件：Server
+#基组件:Server
 
-继承自 Connection 基类，用于定义一个 Server 端。
+Inherited from the Connection base class, used to define a server side.
 
-# 定义
+# definition
 
-```
+`` `
 struct Server : public Connection {
-  // 准备接受客户端连接的本地IP地址
+  // Prepare to accept the local IP address of the client connection
   IpEndpoint accept_addr;
 
-  // True = 进来的连接是透明的，对应ATS的tr-in
+  // True = incoming connections are transparent, corresponding to ATS tr-in
   bool f_inbound_transparent;
 
   // True = 使用kernel的HTTP accept filter
-  // 这是BSD系统上的一个高级过滤器，Linux只有DEFER_ACCEPT与其类似，所以在Linux系统上，此值通常为false
-  // 其功能大概是（我没用过，不是100%确定）
-  //     1. 在kernel内完成TCP握手，
-  //     2. 然后读取第一个请求包，
-  //     3. 是HTTP请求，从accept()调用返回
-  //     4. 不是HTTP请求，关闭TCP连接，等待下一个连接，或者accept()返回错误
+  // This is an advanced filter on the BSD system. Linux only has DEFER_ACCEPT similar to it, so on Linux systems, this value is usually false.
+  // Its function is probably (I haven't used it, not 100% sure)
+  // 1. Complete the TCP handshake in the kernel.
+  // 2. Then read the first request packet,
+  // 3. is an HTTP request, returning from the accept() call
+  // 4. Not an HTTP request, close the TCP connection, wait for the next connection, or accept() returns an error
   bool http_accept_filter;
 
   //
   // Use this call for the main proxy accept
   //
-  // 这个没有定义，在ATS的代码中也没有使用
+  // This is not defined and is not used in the ATS code.
   int proxy_listen(bool non_blocking = false);
 
-  // 接受一个新连接
-  //     使用 this->fd 这个 之前创建好的 listen fd 执行accept()
-  //     新连接的描述符存入 c->fd
-  //     为新链接设置FD_CLOEXEC，nonblocking，SEND_BUF_SIZE
-  // 返回 0 表示成功
-  // 小于 0 表示失败，其值为 -ERRNO
+  // accept a new connection
+  // Use this->fd, which was created before the listen fd to execute accept()
+  // The newly connected descriptor is stored in c->fd
+  // Set FD_CLOEXEC, nonblocking, SEND_BUF_SIZE for the new link
+  // return 0 for success
+  // Less than 0 means failure, its value is -ERRNO
   int accept(Connection *c);
 
-  // 创建一个可用于 accept() 的listen fd
-  //     使用 accept_addr 填充 addr 成员
-  //     创建 TCP socket，SOCK_STREAM，设置为non blocking
-  //     通过 bind() 绑定到IP和PORT
-  // 接下来就可以用 setup_fd_for_listen() 设置一些必要的参数，然后调用 accept() 来接受新连接了
+  // Create a listen fd that can be used for accept()
+  // populate the addr member with accept_addr
+  // Create a TCP socket, SOCK_STREAM, set to non blocking
+  // bind to IP and PORT via bind()
+  // Next, you can set some necessary parameters with setup_fd_for_listen() and then call accept() to accept the new connection.
   int listen(bool non_blocking = false, int recv_bufsize = 0, int send_bufsize = 0, bool transparent = false);
   
-  // 设置成员 fd 的参数
+  / / Set the parameters of the member fd
   //     send buf size, recv buf size, FD_CLOEXEC, SO_LINGER, IPV6_V6ONLY for ipv6
   //     SO_REUSEADDR, TCP_NODELAY, SO_KEEPALIVE, SO_TPROXY, TCP_MAXSEG, non blocking
-  // 为调用 accept() 方法做准备
-  // 之前要首先调用 listen() 创建一个 socket
+  // Prepare to call the accept() method
+  / / Before you first call listen () to create a socket
   int setup_fd_for_listen(bool non_blocking = false, int recv_bufsize = 0, int send_bufsize = 0,
                           bool transparent = false ///< Inbound transparent.
                           );
 
-  // 构造函数
-  // 通过 Connection() 初始化成员：fd=NO_FD，is_bound=false，is_connected=false，sock_type=0，addr内存区域填充0
-  // 初始化成员 f_inbound_transparent=false，accept_addr内存区域填充0
+  // Constructor
+  // Initialize the member via Connection(): fd=NO_FD, is_bound=false, is_connected=false, sock_type=0, addr memory area is filled with 0
+  / / Initialize the member f_inbound_transparent = false, accept_addr memory area is filled with 0
   Server() : Connection(), f_inbound_transparent(false) { ink_zero(accept_addr); }
 };
-```
+`` `
 
-# 参考资料
+# References
 
 - [P_Connection.h]
 (https://github.com/apache/trafficserver/tree/master/iocore/net/P_Connection.h)
