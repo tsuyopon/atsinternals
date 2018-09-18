@@ -46,7 +46,7 @@ The specific status and function will be analyzed next.
 
 ## definition
 
-`` `
+```
 class HttpClientSession : public ProxyClientSession
 {
 public:
@@ -234,7 +234,7 @@ public:
   // At this point, this NetVC is considered to be an active connection, waiting for the transaction to complete, or the connection is aborted.
   bool m_active;
 };
-`` `
+```
 
 ## Status (State)
 
@@ -290,7 +290,7 @@ But there is a gap in the two HTTP requests. There is no HttpSM object in this g
 
 The following is an analysis of the order in which each method is called according to the runtime. The first is called by the HttpSessionAccept::accept() method: new_connection()
 
-`` `
+```
 void
 HttpClientSession::new_connection(NetVConnection *new_vc, MIOBuffer *iobuf, IOBufferReader *reader, bool backdoor)
 {
@@ -388,7 +388,7 @@ HttpClientSession::new_connection(NetVConnection *new_vc, MIOBuffer *iobuf, IOBu
   // lmutex is an automatic pointer. Can you not write this sentence here?
   lmutex.clear();
 }
-`` `
+```
 
 For the sake of analysis, we analyze the SSN START here without any Plugin Hook.
 
@@ -396,7 +396,7 @@ For the sake of analysis, we analyze the SSN START here without any Plugin Hook.
   - then handle_api_return will call the start() method
   - HttpClientSession::start() directly calls the new_transaction() method
 
-`` `
+```
 void
 HttpClientSession::new_transaction()
 {
@@ -439,7 +439,7 @@ HttpClientSession::new_transaction()
     current_reader->plugin_id = pi->getPluginId();
   }
 }
-`` `
+```
 
 The next step will be transferred to the HttpSM process.
 
@@ -469,7 +469,7 @@ Therefore, the function of HttpClientSession::attach_server_session is:
   - Then bind the current HttpServerSession to the HttpClientSession
   - Need to pay attention to the difference with HttpSM::attach_server_session.
 
-`` `
+```
 void
 HttpClientSession::attach_server_session(HttpServerSession *ssession, bool transaction_done)
 {
@@ -528,7 +528,7 @@ HttpClientSession::attach_server_session(HttpServerSession *ssession, bool trans
     slave_ka_vio = NULL;
   }
 }
-`` `
+```
 
 When a transaction (request) ends, HttpSM will call HttpClientSession::release() or HttpClientSession::do_io_close() depending on the situation.
 
@@ -536,7 +536,7 @@ When a transaction (request) ends, HttpSM will call HttpClientSession::release()
   - Otherwise, do_io_close() will be called. 
   - Can refer to the code of HttpSM::tunnel_handler_ua() for analysis
 
-`` `
+```
 // The release method simply disconnects the association between HttpClientSession and HttpSM
 // But the relationship between HttpClientSession and HttpServerSession remains the same
 // and will not actively close the session, but because the keep alive connection queue is full, it may result in forced shutdown
@@ -606,9 +606,9 @@ HttpClientSession::release(IOBufferReader *r)
     // If the connection queue is full, client_vc will be closed immediately, state_keep_alive() will receive the TIMEOUT event, then call do_io_close()
   }
 }
-`` `
+```
 
-`` `
+```
 // do_io_close first disconnects the association between HttpClientSession and HttpServerSession
 // Then put the HttpServerSession back into the connection pool and then perform the session shutdown process
 void
@@ -702,7 +702,7 @@ HttpClientSession::do_io_close(int alerrno)
     do_api_callout(TS_HTTP_SSN_CLOSE_HOOK);
   }
 }
-`` `
+```
 
 For the sake of analysis, we analyze it here without any Plugin Hook at SSN CLOSE:
 
@@ -710,7 +710,7 @@ For the sake of analysis, we analyze it here without any Plugin Hook at SSN CLOS
   - Execute release_netvc() to unlink HttpClientSession from client_vc
   - Call HttpClientSession::destroy() to release the object
 
-`` `
+```
 void
 HttpClientSession::destroy()
 {
@@ -746,7 +746,7 @@ HttpClientSession::destroy()
   // Release the memory space occupied by the object
   THREAD_FREE(this, httpClientSessionAllocator, this_thread());
 }
-`` `
+```
 
 ## Understanding HttpClientSession with NetVConnection
 
@@ -780,7 +780,7 @@ Prior to Linux 3.0, the kernel's default initcwnd was small, calculated accordin
 
 Typically, our MSS is 1460, so the initial congestion control window is 3.
 
-`` `
+```
 /* Convert RFC3390 larger initial window into an equivalent number of packets. 
  * This is based on the numbers specified in RFC 6861, 3.1. 
  * /  
@@ -788,7 +788,7 @@ static inline u32 rfc3390_bytes_to_packets(const u32 smss)
 {  
     return smss <= 1095 ? 4 : (smss > 2190 ? 2 : 3);  
 }  
-`` `
+```
 
 After Linux 3.0, Google's advice was adopted to adjust the initial congestion control window to 10.
 

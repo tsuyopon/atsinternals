@@ -2,7 +2,7 @@
 
 ## definition
 
-`` `
+```
 source: proxy/http/HttpProxyAPIEnums.h
 /// Server session sharing values - match
 typedef enum {
@@ -17,9 +17,9 @@ typedef enum {
   TS_SERVER_SESSION_SHARING_POOL_GLOBAL, // share the session pool across threads,
   TS_SERVER_SESSION_SHARING_POOL_THREAD, // shared session pool within the thread
 } TSServerSessionSharingPoolType;
-`` `
+```
 
-`` `
+```
 /** A pool of server sessions.
 
     This is a continuation so that it can get callbacks from the server sessions.
@@ -139,24 +139,24 @@ public:
   HostHashTable m_host_pool;
   // Note that each session will exist in both tables
 };
-`` `
+```
 
 ## Method
 
 ### ServerSessionPool::ServerSessionPool
 
-`` `
+```
 ServerSessionPool::ServerSessionPool() : Continuation(new_ProxyMutex()), m_ip_pool(1023), m_host_pool(1023)
 {
   SET_HANDLER(&ServerSessionPool::eventHandler);
   m_ip_pool.setExpansionPolicy(IPHashTable::MANUAL);
   m_host_pool.setExpansionPolicy(HostHashTable::MANUAL);
 }
-`` `
+```
 
 ### initialize_thread_for_http_sessions
 
-`` `
+```
 source: proxy/http/HttpSessionManager.cc
 // Initialize a thread to handle HTTP session management
 void
@@ -164,11 +164,11 @@ initialize_thread_for_http_sessions(EThread *thread, int /* thread_index ATS_UNU
 {
   thread->server_session_pool = new ServerSessionPool;
 }
-`` `
+```
 
 In UnixNetProcessor::start(), initialize_thread_for_http_sessions is called to create a ServerSessionPool object for each thread.
 
-`` `
+```
 int
 UnixNetProcessor::start(int, size_t)
 {
@@ -190,14 +190,14 @@ UnixNetProcessor::start(int, size_t)
   }
 ...
 }
-`` `
+```
 
 This can actually be understood as the use of netProcessor to do httpProcessor, but httpProcessor is not defined in ATS.
 
 
 ### ServerSessionPool::match
 
-`` `
+```
 // used to determine if a ServerSession matches the specified Origin Server IP and hostname information
 bool
 ServerSessionPool::match(HttpServerSession *ss, sockaddr const *addr, INK_MD5 const &hostname_hash,
@@ -210,11 +210,11 @@ ServerSessionPool::match(HttpServerSession *ss, sockaddr const *addr, INK_MD5 co
          // The IP address matches if we're not checking it or it is a match.
          (TS_SERVER_SESSION_SHARING_MATCH_HOST == match_style || ats_ip_addr_port_eq(ss->server_ip, addr));
 }
-`` `
+```
 
 Use match_style to represent the matching rule and convert the above content to the syntax of if-else:
 
-`` `
+```
   if (TS_SERVER_SESSION_SHARING_MATCH_NONE == match_style) {
     // If nothing matches, return false directly
     return false;
@@ -248,11 +248,11 @@ Use match_style to represent the matching rule and convert the above content to 
   } else {
     return false;
   }
-`` `
+```
 
 ### ServerSessionPool::acquireSession
 
-`` `
+```
 // Incoming the IP information and hostname information of the Origin Server, and the mode you want to match
 // Returns the ServerSession found from the session pool by to_return according to the specified match pattern
 // Return value: always HSM_NOT_FOUND
@@ -307,11 +307,11 @@ ServerSessionPool::acquireSession(sockaddr const *addr, INK_MD5 const &hostname_
   // always returns HSM_NOT_FOUND
   return zret;
 }
-`` `
+```
 
 ### ServerSessionPool::releaseSession
 
-`` `
+```
 // Put the ServerSession into the session pool
 void
 ServerSessionPool::releaseSession(HttpServerSession *ss)
@@ -343,11 +343,11 @@ ServerSessionPool::releaseSession(HttpServerSession *ss)
                    "session placed into shared pool",
         ss->con_id);
 }
-`` `
+```
 
 ### ServerSessionPool::eventHandler
 
-`` `
+```
 // Session pool event handler
 int
 ServerSessionPool::eventHandler(int event, void *data)
@@ -444,11 +444,11 @@ ServerSessionPool::eventHandler(int event, void *data)
   }
   return 0;
 }
-`` `
+```
 
 ### ServerSessionPool::purge
 
-`` `
+```
 void
 ServerSessionPool::purge()
 {
@@ -458,7 +458,7 @@ ServerSessionPool::purge()
   m_ip_pool.clear();
   m_host_pool.clear();
 }
-`` `
+```
 
 ## References
 

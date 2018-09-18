@@ -12,7 +12,7 @@ Before introducing Event, first look at the Action:
 
 Event inherits from Action, first look at the Action class
 
-`` `
+```
 class Action
 {
 public:
@@ -57,7 +57,7 @@ public:
     virtual ~ Action() {
     }
 };
-`` `
+```
 
 ## Processor Method implementer:
 
@@ -127,7 +127,7 @@ In addition to being able to cancel the event (because it is an action), you can
 
 ## Definition / Member
 
-`` `
+```
 class Event : public Action 
 { 
 public: 
@@ -219,7 +219,7 @@ Event::Event()
     ::_a.free(_p);             \
   else                         \
   THREAD_FREE(_p, _a, _t)
-`` `
+```
 
 ## Event method
 
@@ -291,24 +291,24 @@ The rules for Action are the same as the following.
 
 Usually the Event Code passed when calling Cont->handleEvent is as follows:
 
-`` `
+```
 #define EVENT_NONE CONTINUATION_EVENT_NONE // 0
 #define EVENT_IMMEDIATE 1
 #define EVENT_INTERVAL 2
 #define EVENT_ERROR 3
 #define EVENT_CALL 4 // used internally in state machines
 #define EVENT_POLL 5 // negative event; activated on poll or epoll
-`` `
+```
 
 Usually Cont->handleEvent will also return an Event Callback Code.
 
-`` `
+```
 #define EVENT_DONE CONTINUATION_DONE // 0
 #define EVENT_CONT CONTINUATION_CONT // 1
 #define EVENT_RETURN 5
 #define EVENT_RESTART 6
 #define EVENT_RESTART_DELAYED 7
-`` `
+```
 
 PS: But there is no judgment on the return value of Cont->handleEvent in EThread::execute().
 

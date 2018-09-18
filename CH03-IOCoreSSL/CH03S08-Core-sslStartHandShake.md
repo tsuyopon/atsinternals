@@ -25,7 +25,7 @@ sslStartHandShake is used to initialize the members of SSLNetVC SSL *ssl;. In th
 
 After the ssl initialization is completed, sslServerHandShakeEvent or sslClientHandShakeEvent is called according to the value of the event to complete the subsequent handshake.
 
-`` `
+```
 int
 SSLNetVConnection::sslStartHandShake(int event, int &err)
 {
@@ -128,7 +128,7 @@ SSLNetVConnection::sslStartHandShake(int event, int &err)
     return EVENT_ERROR;
   }
 }
-`` `
+```
 
 ## Handshake process when ATS is used as SSL Server
 
@@ -150,7 +150,7 @@ The hibernation state of the above two Hooks needs to call reenable in the Hook 
 
 It should be noted that NetHandler will call back sslServerHandShakeEvent when reading events and writing events, so you should consider both the read and write callbacks when reading the code.
 
-`` `
+```
 int
 SSLNetVConnection::sslServerHandShakeEvent(int &err)
 {
@@ -466,7 +466,7 @@ SSLNetVConnection::sslServerHandShakeEvent(int &err)
     return EVENT_ERROR;
   }
 }
-`` `
+```
 
 ### Implementation of SNI/CERT Hook
 
@@ -530,7 +530,7 @@ Note that there are two definitions of scoped_config:
    - SSLCertificateConfig::scoped_config
      - The constructor gets the structure data of type SSLCertLookup from ConfigProcessor and completes the initialization.
 
-`` `
+```
 source: P_SSLConfig.h
 struct SSLConfig {
   static void startup();
@@ -555,13 +555,13 @@ struct SSLCertificateConfig {
 private:
   static int configid;
 };
-`` `
+```
 
 The ssl_set_handshake_callbacks method uses macro definitions to determine which OpenSSL API method to use to set the Hook function.
 
 Note that if TS_USE_TLS_SNI is 0, then ssl_set_handshake_callbacks is an empty function.
 
-`` `
+```
 source: SSLUtils.cc
 static void
 ssl_set_handshake_callbacks(SSL_CTX *ctx)
@@ -575,7 +575,7 @@ ssl_set_handshake_callbacks(SSL_CTX *ctx)
 #endif
 #endif
 }
-`` `
+```
 
 The following are the two callback functions ssl_cert_callback and ssl_servername_callback:
   - ssl_cert_callback
@@ -596,7 +596,7 @@ The set_context_cert method is the public part of the two callback functions:
 
 Similarly, if TS_USE_TLS_SNI is 0, the above three methods will not be defined.
 
-`` `
+```
 source: SSLUtils.cc
 #if TS_USE_TLS_SNI
 int
@@ -785,7 +785,7 @@ done:
 }
 #endif
 #endif /* TS_USE_TLS_SNI */
-`` `
+```
 
 ### Callback for SNI/CERT Hook
 
@@ -800,7 +800,7 @@ The call stack to the callHooks method is as follows:
       - ssl_servername_callback() / ssl_cert_callback()
         - callHooks()
 
-`` `
+```
 bool
 SSLNetVConnection::callHooks(TSHttpHookID eventId)
 {
@@ -852,11 +852,11 @@ SSLNetVConnection::callHooks(TSHttpHookID eventId)
   // This function returns true for the SSL_accept process to complete.
   return reenabled;
 }
-`` `
+```
 
 Note that the SSLNetVConnection::reenable() method is polymorphic. The following is the one called by TSAPI TSVConnReenable(ssl_vc):
 
-`` `
+```
 void
 SSLNetVConnection :: reenable (NetHandler * nh)
 {
@@ -884,7 +884,7 @@ SSLNetVConnection :: reenable (NetHandler * nh)
     }
   }
 }
-`` `
+```
 
 ## Handshake process when ATS is used as SSL Client
 
@@ -919,7 +919,7 @@ The main implementation of sslClientHandShakeEvent is:
 
   - ATS acts as an SSL Client to initiate an SSL Handshake to OServer
   
-`` `
+```
 int
 SSLNetVConnection::sslClientHandShakeEvent(int &err)
 {
@@ -1030,15 +1030,15 @@ SSLNetVConnection::sslClientHandShakeEvent(int &err)
   }
   return EVENT_CONT;
 }
-`` `
+```
 
 ### OServer certificate verification process
 
 If OServer certificate chain verification is enabled in the ATS records.config:
 
-`` `
+```
 CONFIG proxy.config.ssl.client.verify.server INT 1
-`` `
+```
 
 Then, after obtaining the certificate of OServer, ATS will verify the certificate chain, and the verification result of the certificate chain is saved to preverify_ok:
 
@@ -1047,7 +1047,7 @@ Then, after obtaining the certificate of OServer, ATS will verify the certificat
 
 Then call adjust_callback() to verify the domain name match.
 
-`` `
+```
 source: SSLClientUtils.cc
 int
 verify_callback(int preverify_ok, X509_STORE_CTX *ctx)
@@ -1123,7 +1123,7 @@ verify_callback(int preverify_ok, X509_STORE_CTX *ctx)
   // If not SSLVC, directly return verification success
   return verify_ok;
 }
-`` `
+```
 
 # reference
 

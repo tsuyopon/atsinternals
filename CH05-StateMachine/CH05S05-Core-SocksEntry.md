@@ -6,7 +6,7 @@ When the upper layer SM calls netProcessor.connect_re(), it determines whether t
 
 ## definition
 
-`` `
+```
 // Like the SSL protocol, the Socks protocol can be understood as a transport layer protocol.
 // The difference is that Socks only has a handshake process, but there is no communication encryption and decryption function.
 // So, here too, SocksNetVC is defined like SSLNetVConnection
@@ -92,7 +92,7 @@ struct SocksEntry : public Continuation {
 typedef int (SocksEntry::*SocksEntryHandler)(int, void *);
 
 external ClassAllocator <SocksEntry> socksAllocator;
-`` `
+```
 
 ## Method
 
@@ -117,7 +117,7 @@ SocksEntry::init(mutex, vc, socks_support, ver)
 - As the caller of the init() method, the server_addr member will be used instead of the target IP and port of vc
   - This will make a TCP connection to the Socks proxy server when the connect() call is initiated later.
 
-`` `
+```
 void
 SocksEntry::init(ProxyMutex *m, SocksNetVC *vc, unsigned char socks_support, unsigned char ver)
 {
@@ -173,7 +173,7 @@ SocksEntry::init(ProxyMutex *m, SocksNetVC *vc, unsigned char socks_support, uns
   timeout = this_ethread()->schedule_in(this, HRTIME_SECONDS(netProcessor.socks_conf_stuff->server_connect_timeout));
   write_done = false;
 }
-`` `
+```
 
 SocksEntry::findServer()
 
@@ -186,7 +186,7 @@ SocksEntry::findServer()
     - Avoid retrying repeatedly causing connection timeouts when there are more Socks proxy servers available
     - Or set this value to: The number of available Socks proxy servers * per_server_connection_attempts to ensure that all Socks proxy servers are tried
 
-`` `
+```
 void
 SocksEntry::findServer()
 {
@@ -259,7 +259,7 @@ SocksEntry::findServer()
   Debug("SocksParents", "findServer result: %s:%d", ats_ip_ntop(&server_addr.sa, buff, sizeof(buff)),
         ats_ip_port_host_order(&server_addr));
 }
-`` `
+```
 
 SocksEntry::free()
 
@@ -269,7 +269,7 @@ SocksEntry::free()
 - Need to consider the state machine has been closed (such as the state machine has been closed will call the cancel method through the Action object)
 - need to reset the do_io operation before releasing the SocksEntry object
 
-`` `
+```
 void
 SocksEntry::free()
 {
@@ -341,7 +341,7 @@ SocksEntry::free()
   // Recycle the SocksEntry object
   socksAllocator.free(this);
 }
-`` `
+```
 
 SocksEntry::startEvent(event, data)
 - used to complete the TCP connection with the Socks proxy server
@@ -351,7 +351,7 @@ SocksEntry::startEvent(event, data)
   - or choose the next available Socks proxy server
 - Do_io_close() will be executed on the previous netVC before reconnecting
 
-`` `
+```
 int
 SocksEntry::startEvent(int event, void *data)
 {
@@ -417,7 +417,7 @@ SocksEntry::startEvent(int event, void *data)
 
   return EVENT_CONT;
 }
-`` `
+```
 
 SocksEntry::mainEvent
 - If using the Socks v5 protocol, based on RFC1928 implementation
@@ -460,7 +460,7 @@ SocksEntry::mainEvent
   - USERID: Username, length 0 bytes means no username
   - NULL: its value is 0x00, which is used to indicate the end of the username.
 
-`` `
+```
 int
 SocksEntry::mainEvent(int event, void *data)
 {
@@ -761,7 +761,7 @@ SocksEntry::mainEvent(int event, void *data)
 
   return right;
 }
-`` `
+```
 
 Timeout management in ### SocksEntry::mainEvent()
 

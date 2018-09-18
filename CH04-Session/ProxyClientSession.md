@@ -17,7 +17,7 @@ Any XXXClientSession must define four methods: start(), new_connection(), get_ne
 
 ProxyClientSession cannot be used directly, you must define its inheritance class to use.
 
-`` `
+```
 class ProxyClientSession : public VConnection
 {
 public:
@@ -126,7 +126,7 @@ private:
 
   friend void TSHttpSsnDebugSet(TSHttpSsn, int);
 };
-`` `
+```
 
 ## Method
 
@@ -237,7 +237,7 @@ In this set defined in the ProxyClientSession, the three methods are at the Glob
   - If there is no plugin hook on the specified Hook ID, call handle_api_return directly back to the main flow of ATS
   - Otherwise, callback to the plugin function is implemented via state_api_callout
 
-`` `
+```
 // Initiate a call to the plugin function on the specified Hook ID
 void
 ProxyClientSession::do_api_callout(TSHttpHookID id)
@@ -269,18 +269,18 @@ ProxyClientSession::do_api_callout(TSHttpHookID id)
     this->handle_api_return(TS_EVENT_HTTP_CONTINUE);
   }
 }
-`` `
+```
 
-`` `
+```
 // Hook ID legality check
 static bool
 is_valid_hook(TSHttpHookID hookid)
 {
   return (hookid >= 0) && (hookid < TS_HTTP_LAST_HOOK);
 }
-`` `
+```
 
-`` `
+```
 // Implement the callback to the plugin function
 int
 ProxyClientSession::state_api_callout(int event, void * /* data ATS_UNUSED */)
@@ -386,9 +386,9 @@ ProxyClientSession::state_api_callout(int event, void * /* data ATS_UNUSED */)
   // Here is actually the returned EVENT_DONE = 0
   return 0;
 }
-`` `
+```
 
-`` `
+```
 // Go back to the main process of ATS
 void
 ProxyClientSession::handle_api_return(int event)
@@ -438,7 +438,7 @@ ProxyClientSession::handle_api_return(int event)
     break;
   }
 }
-`` `
+```
 It can be seen that in the base class of ProxyClientSession, only the processing of returning the two Hook points of SSN START and SSN CLOSE to the ATS main flow is realized.
 
 But when SSN START encounters an error and closes ClientSession, the code to close ClientSession after SSN CLOSE is completely different. Why?

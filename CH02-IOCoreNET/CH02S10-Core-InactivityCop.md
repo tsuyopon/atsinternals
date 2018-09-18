@@ -17,7 +17,7 @@ For an introduction to several queues managed by InactivityCop, see the NetHandl
 
 ## definition
 
-`` `
+```
 // This macro is not defined, indicating the use of a new timeout management mechanism: InactivityCop state machine
 #ifndef INACTIVITY_TIMEOUT
 int update_cop_config(const char *name, RecDataT data_type, RecData data, void *cookie);
@@ -151,7 +151,7 @@ update_cop_config(const char *name, RecDataT data_type ATS_UNUSED, RecData data,
 }
 
 #endif
-`` `
+```
 
 ## Active Queue & Keep-Alive Queue
 
@@ -174,7 +174,7 @@ When the number of available connections to the ATS is insufficient (the maximum
 
 Add NetVC to active_queue or remove NetVC from active_queue
 
-`` `
+```
 bool
 NetHandler::add_to_active_queue(UnixNetVConnection *vc)
 {
@@ -218,7 +218,7 @@ NetHandler::remove_from_active_queue(UnixNetVConnection *vc)
     --active_queue_size;
   }
 }
-`` `
+```
 
 ## Extension of NetHandler: manage_active_queue
 
@@ -228,7 +228,7 @@ The following manage_active_queue does not implement Active Timeout processing. 
 
 By reading the code, I feel that in the implementation of InactivityCop, Active Timeout seems to be broken, can not be used.
 
-`` `
+```
 bool
 NetHandler::manage_active_queue()
 {
@@ -271,13 +271,13 @@ NetHandler::manage_active_queue()
   // In the ATS code, only add_to_active_queue() will evaluate this value.
   return false; // failed to make room in the queue, all connections are active
 }
-`` `
+```
 
 ## Extension of NetHandler: (add_to|remove_from)_keep_alive_queue
 
 Add NetVC to keep_alive_queue, or remove NetVC from keep_alive_queue
 
-`` `
+```
 void
 NetHandler::add_to_keep_alive_queue(UnixNetVConnection *vc)
 {
@@ -313,7 +313,7 @@ NetHandler::remove_from_keep_alive_queue(UnixNetVConnection *vc)
     --keep_alive_queue_size;
   }
 }
-`` `
+```
 
 ## Extension of NetHandler: manage_keep_alive_queue
 
@@ -326,7 +326,7 @@ This has new requirements for timeout control.
 
 ATS puts this type of vc into keep_alive_queue for processing. The following is the way to manage keep_alive_queue.
 
-`` `
+```
 void
 NetHandler::manage_keep_alive_queue()
 {
@@ -374,7 +374,7 @@ NetHandler::manage_keep_alive_queue()
   }
   // Since keep_alive_queue is an optional connection pool, there is no failure, so no value is returned.
 }
-`` `
+```
 
 ## NetHandler extension: _close_vc
 
@@ -394,7 +394,7 @@ Returns the value of multiple counters:
   - total_idle_time accumulates the time of this vc idle state to this counter, in seconds
   - total_idle_count This value is incremented when this process encounters the vc idle state for more than 1 second.
 
-`` `
+```
 void
 NetHandler::_close_vc(UnixNetVConnection *vc, ink_hrtime now, int &handle_event, int &closed, int &total_idle_time,
                       int &total_idle_count)
@@ -436,7 +436,7 @@ NetHandler::_close_vc(UnixNetVConnection *vc, ink_hrtime now, int &handle_event,
     ++handle_event;
   }
 }
-`` `
+```
 
 ## References
 

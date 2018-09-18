@@ -4,7 +4,7 @@ EThread inherits from Thread, first look at the definition of Thread:
 
 ## definition
 
-`` `
+```
 class Thread
 {
 public:
@@ -73,7 +73,7 @@ public:
 };
 
 extern Thread *this_thread();
-`` `
+```
 
 ## Method
 
@@ -84,7 +84,7 @@ extern Thread *this_thread();
   - Threads always keep their own mutex locks
   - This way, if you reuse a thread mutex object, it is equivalent to being permanently locked by the thread, becoming a local object that belongs only to this thread.
 
-`` `
+```
 Thread::Thread()
 {
   mutex = new_ProxyMutex();
@@ -92,11 +92,11 @@ Thread::Thread()
   MUTEX_TAKE_LOCK(mutex, (EThread *)this);
   mutex->nthread_holding = THREAD_MUTEX_THREAD_HOLDING;
 }
-`` `
+```
 
 ### Thread::set_specific()
 
-`` `
+```
 // source: iocore/eventsystem/P_Thread.h
 TS_INLINE void
 Thread::set_specific()
@@ -104,7 +104,7 @@ Thread::set_specific()
   Associate the current object (this) with the key
   ink_thread_setspecific(Thread::thread_data_key, this);
 }
-`` `
+```
 
 ## About this_thread()
 
@@ -114,7 +114,7 @@ Thread::set_specific()
     - but the type of the return value is still Thread *
     - In order to provide the correct return value type, the this_ethread() method is defined in EThread
 
-`` `
+```
   // The following is a comment in I_Thread.h
   The Thread class maintains a thread_key which registers *all*
   the threads in the system (that have been created using Thread or
@@ -158,23 +158,23 @@ Thread::set_specific()
   Pointer (not the EThread type).
   Note: From the current code, you can convert to EThread by type, which is done in this_ethread().
 
-`` `
+```
 
 Using the same key, the data obtained in different threads is different. Similarly, the bound data is only associated with the current thread.
 Therefore, calls to thread specific related functions are closely related to the thread they are in.
 
-`` `
+```
 TS_INLINE Thread *
 this_thread()
 {
   Retrieve previously associated objects by key
   return (Thread *)ink_thread_getspecific(Thread::thread_data_key);
 }
-`` `
+```
 
 ### About this_ethread()
 
-`` `
+```
 // source: iocore/eventsystem/P_UnixEThread.h
 TS_INLINE EThread *
 this_ethread()
@@ -182,7 +182,7 @@ this_ethread()
   Call this_thread() directly and type conversion
   return (EThread *)this_thread();
 }
-`` `
+```
 
 ### Thread::start()
 
@@ -190,7 +190,7 @@ Thread start
 
   - Before each thread is created, the set_specific() method is called to bind the thread data.
 
-`` `
+```
 // source: iocore/eventsystem/Thread.cc
 static void *
 spawn_thread_internal(void *a) 
@@ -229,21 +229,21 @@ Thread::start(const char *name, size_t stacksize, ThreadFunction f, void *a)
 
   return time;
 }
-`` `
+```
 
   - There is a very strange place in Main.cc that also calls set_specific
     - But I didn't see any place to use main_thread afterwards.
     - From the notes, here is the support for running ATS on the win_9xMe system.
     - Optimization for calls to start_HttpProxyServer()
 
-`` `
+```
 // source: proxy/Main.cc
   // This call is required for win_9xMe
   // without this this_ethread() is failing when
   // start_HttpProxyServer is called from main thread
   Thread *main_thread = new EThread;
   main_thread->set_specific();   
-`` `
+```
 
 How does ## main() become [ET_NET 0]?
 
@@ -255,7 +255,7 @@ This_ethread()->execute() was executed at the end of Main.cc
   - But the procedure that needs to call set_specific() in spawn_thread_internal() goes there?
   - How can this_ethread() return an EThread object if set_specific() is not called?
 
-`` `
+```
 // source: iocore/eventsystem/UnixEventProcessor.cc
 int
 EventProcessor::start(int n_event_threads, size_t stacksize)
@@ -284,7 +284,7 @@ EventProcessor::start(int n_event_threads, size_t stacksize)
     ink_thread tid = all_ethreads[i]->start(thr_name, stacksize);
 ...
 }
-`` `
+```
 
 The above code shows that special handling of all_ethreads[0] is done in the EventProcessor::start() method.
 
@@ -318,14 +318,14 @@ It is one of the interfaces for the Event System to dispatch events (the other t
 
 ## Type of EThread
 
-`` `
+```
 source: iocore/eventsystem/I_EThread.h
 enum ThreadType {
   REGULAR = 0,
   MONITOR,
   DEDICATED,
 };
-`` `
+```
 
 ATS can create two types of EThread threads:
 
@@ -388,7 +388,7 @@ The above four methods will eventually call the public part of schedule_local()
 
 ## definition
 
-`` `
+```
 class EThread : public Thread
 {
 public:
@@ -499,18 +499,18 @@ EThread::free_event(Event *e)
   e->mutex = NULL;
   EVENT_FREE(e, eventAllocator, this);
 }
-`` `
+```
 
 ## About EThread::event_types
 
 EventType is actually an int type, starting with ET_CALL(0) and having a maximum of 7, you can define 8 types. The definition of EventType is as follows:
 
-`` `
+```
 source: iocore/eventsystem/I_Event.h
 typedef int EventType;
 const int ET_CALL = 0;
 const int MAX_EVENT_TYPES = 8; // conservative, these are dynamically allocated
-`` `
+```
 
 EThread member event_types is a bitwise operation state value. Since EventType can define up to 8 types, only the lower 8 bits are used.
 
@@ -518,7 +518,7 @@ By calling the method ```void set_event_type(EventType et)``` multiple times, yo
 
 You can use the method ```bool is_event_type(EventType et)``` to determine whether the EThread supports processing of the specified type of event.
 
-`` `
+```
 source: iocore/eventsystem/UnixEThread.cc
 bool
 EThread::is_event_type(EventType et)
@@ -531,11 +531,11 @@ EThread::set_event_type(EventType et)
 {
   event_types |= (1 << (int)et);
 }
-`` `
+```
 
 ## EThread::process_event() analyze
 
-`` `
+```
 source: iocore/eventsystem/UnixEThread.cc
 
 void
@@ -591,7 +591,7 @@ EThread::process_event(Event *e, int calling_code)
       free_event(e);
   }
 }
-`` `
+```
 
 ## EThread::execute() REGULAR and DEDICATED Process Analysis
 
@@ -604,7 +604,7 @@ EThread::execute() is divided into multiple parts by the switch statement:
 
 The following is a comment and analysis of the execute() code:
 
-`` `
+```
 source: iocore/eventsystem/UnixEThread.cc
 //
 // void  EThread::execute()
@@ -807,7 +807,7 @@ EThread::execute()
   } /* End switch */
   // coverity[missing_unlock]
 }
-`` `
+```
 
 The following is a simplified logical and logical diagram:
 
@@ -832,7 +832,7 @@ The following is a simplified logical and logical diagram:
 
 //end for(;;)
 
-`` `
+```
                                                                                      + ------------- +
        +-----------------------------------------------------------------------------o    Sleep    |
        | + ------ ^ ------ +
@@ -875,7 +875,7 @@ The following is a simplified logical and logical diagram:
 o--------->  execute route
 o#########>  event route
 <%%%%%%%%%>  call and return
-`` `
+```
 
 From the above figure, we can see that REGULAR EThread is divided into two types according to whether the implicit queue is empty.
 
@@ -995,7 +995,7 @@ Why is there a special method like schedule_imm_signal?
 
 In schedule_*(), the event is placed into the external queue via ```EventQueueExternal.enqueue(e, fast_signal=true)```.
 
-`` `
+```
 TS_INLINE Event *
 EventProcessor::schedule(Event *e, EventType etype, bool fast_signal)
 {
@@ -1012,13 +1012,13 @@ EventProcessor::schedule(Event *e, EventType etype, bool fast_signal)
   e->ethread->EventQueueExternal.enqueue(e, fast_signal);
   return e;
 }
-`` `
+```
 
 When reading the code of the enqueue() method, be sure to look at the above schedule() method and find the most awake moment of the brain, otherwise it will be easy to faint...
 
 EventQueueExternal is a ProtectedQueue, then its enqueue method is as follows:
 
-`` `
+```
 source:iocore/eventsystem/ProtectedQueue.cc
 void
 ProtectedQueue::enqueue(Event *e, bool fast_signal)
@@ -1129,7 +1129,7 @@ ProtectedQueue::enqueue(Event *e, bool fast_signal)
     }
   }
 }
-`` `
+```
 
 Look at signal and try_signal again.
 
@@ -1154,7 +1154,7 @@ Instead, it means:
 
 The relevant code is as follows:
 
-`` `
+```
 source: iocore/eventsystem/P_ProtectedQueue.h
 TS_INLINE void
 ProtectedQueue::signal()
@@ -1177,11 +1177,11 @@ ProtectedQueue::try_signal()
     return 0;
   }
 }
-`` `
+```
 
 When the notification is placed in the signal queue, it will be judged in the REGULAR mode of EThread::execute(). If the signal queue is found to have elements, flush_signals(this) will be called for notification. The relevant code is as follows:
 
-`` `
+```
 void
 flush_signals(EThread *thr)
 {
@@ -1228,13 +1228,13 @@ flush_signals(EThread *thr)
   // Since the queue length is converted to a mapping table when it reaches the maximum value, and there is no logic for reverse conversion, all elements in the table are completely processed each time.
   thr->n_ethreads_to_be_signalled = 0;
 }
-`` `
+```
 
 ## About EAGER_SIGNALLING
 
 This is described in [ProtectedQueue.cc] (http://github.com/apache/trafficserver/tree/master/iocore/eventsystem/ProtectedQueue.cc):
 
-`` `
+```
  36 // The protected queue is designed to delay signaling of threads
  37 // until some amount of work has been completed on the current thread
  38 // in order to prevent excess context switches.
@@ -1243,7 +1243,7 @@ This is described in [ProtectedQueue.cc] (http://github.com/apache/trafficserver
  41 // threads to be made runnable immediately.
  42 //
  43 // #define EAGER_SIGNALLING
-`` `
+```
 
 The translation is as follows:
 

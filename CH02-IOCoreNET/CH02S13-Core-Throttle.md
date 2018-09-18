@@ -25,7 +25,7 @@ Because Throttle's implementation is not a class, it is spread across multiple s
 
 The first is a few constant macro definitions and enumeration values:
 
-`` `
+```
 source: P_UnixNet.h
 // When the warning message is output, it needs to be separated by 24 hours or more to avoid sending a large number of warning messages repeatedly.
 #define TRANSIENT_ACCEPT_ERROR_MESSAGE_EVERY HRTIME_HOURS(24)
@@ -54,11 +54,11 @@ enum ThrottleType {
   ACCEPT,
   CONNECT,
 };
-`` `
+```
 
 Then there are several related global variables that are interpreted according to the order of initialization:
 
-`` `
+```
 source: UnixNet.cc
 / / The operating system limits the number of file open (ATS hard limit on the total number of file open)
 // its value is affected by the configuration item: proxy.config.system.file_max_pct, the default value is 90%
@@ -96,11 +96,11 @@ ink_hrtime last_throttle_warning;
 ink_hrtime last_shedding_warning;
 ink_hrtime emergency_throttle_time;
 ink_hrtime last_transient_accept_error;
-`` `
+```
 
 ### Internal method
 
-`` `
+```
 source: P_UnixNet.h
 // PRIVATE: This is a Throttle internal method
 // Calculate the number of connections that are currently open based on the statistics.
@@ -136,11 +136,11 @@ emergency_throttle(ink_hrtime now)
 {
   return (bool)(emergency_throttle_time > now);
 }
-`` `
+```
 
 ### external method
 
-`` `
+```
 source: P_UnixNet.h
 // PUBLIC: This is the Interface provided to IOCore Net Subsystem
 / / used to detect the current Throttle state
@@ -209,11 +209,11 @@ check_emergency_throttle(Connection &con)
   }
   return false;
 }
-`` `
+```
 
 ### Loading configuration items
 
-`` `
+```
 // PUBLIC: This is the Interface provided to IOCore Net Subsystem
 / / used to update the net_connections_throttle value
 // Reset the value of net_connections_throttle after the configuration file is updated
@@ -235,11 +235,11 @@ change_net_connections_throttle(const char *token, RecDataT data_type, RecData v
   }
   return 0;
 }
-`` `
+```
 
 ### Error determination and warning message output
 
-`` `
+```
 source: P_UnixNet.h
 // PUBLIC: This is the Interface provided to IOCore Net Subsystem
 // Determine the error status of accept()
@@ -331,11 +331,11 @@ check_throttle_warning()
     RecSignalWarning(REC_SIGNAL_SYSTEM_ERROR, "too many connections, throttling");
   }
 }
-`` `
+```
 
 ### Output warning message to the client
 
-`` `
+```
 source: UnixNetAccept.cc
 // PUBLIC: This is the Interface provided to IOCore Net Subsystem
 // When the throttle_error_message function is enabled (the code to enable this feature is gone), when the Throttle state is encountered:
@@ -377,7 +377,7 @@ send_throttle_message(NetAccept *na)
     con[i].close();
   return 0;
 }
-`` `
+```
 
 ## Throttle's implementation
 
@@ -396,7 +396,7 @@ The following uses the repaired code for analysis:
 
 NetAccept has several modes of operation. First, it analyzes the operation of blocking accept in Dedicated EThread:
 
-`` `
+```
 int
 NetAccept::do_blocking_accept(EThread *t) 
 {
@@ -470,11 +470,11 @@ NetAccept::do_blocking_accept(EThread *t)
 
   return 1;
 }
-`` `
+```
 
 Then analyze the non-blocking accept mode in Regular EThread:
 
-`` `
+```
 // Through the periodic Event, acceptFastEvent is periodically called back
 int   
 NetAccept::acceptFastEvent(int event, void *ep)
@@ -552,11 +552,11 @@ Learner:
   delete this;
   return EVENT_DONE;
 }
-`` `
+```
 
 ### Implementation in connectUp
 
-`` `
+```
 int
 UnixNetVConnection::connectUp(EThread *t, int fd)
 {
@@ -631,7 +631,7 @@ UnixNetVConnection::connectUp(EThread *t, int fd)
   }
 ...
 }
-`` `
+```
 
 You can see that there is no safe_delay() operation in the CONNECT direction because:
 
@@ -647,9 +647,9 @@ This is the file descriptor that ATS retains for non-network communication. The 
 
 I looked up the definition of CACHE_DB_FDS:
 
-`` `
+```
 cache/I_CacheDefs.h:#define CACHE_DB_FDS 128
-`` `
+```
 
 But I haven't found any place to use this macro after discussing it with other developers in the community:
 

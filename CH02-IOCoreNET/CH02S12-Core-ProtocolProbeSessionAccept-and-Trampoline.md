@@ -12,7 +12,7 @@ If it is not the HTTP protocol, the HttpSM implements the error handling of the 
 
 In order to realize the identification of the protocol type first, and then create the state machine that handles the corresponding protocol, ATS designed SessionTrampoline to cooperate with SessionAccept, so that UnixNetVC jumps from SessionAccept to SessionTrampoline, like a ninja jump, with potential energy conversion. , then jump to the final destination:
 
-`` `
+```
                                                                               + + +
                                                 ? + + + +
                                           ? + + + +
@@ -37,11 +37,11 @@ In order to realize the identification of the protocol type first, and then crea
    == == = = == == ==
  ================= ====================== =========== =========================
 
-`` `
+```
 
 ## definition
 
-`` `
+```
 // The structure of the enumerated type, used to define the types of protocols supported. If you need to extend the supported protocols in the future, you can expand it here.
 struct ProtocolProbeSessionAcceptEnums {
   /// Enumeration for related groups of protocols.
@@ -92,11 +92,11 @@ private:
 
   friend struct ProtocolProbeTrampoline;
 };
-`` `
+```
 
 ## Method
 
-`` `
+```
 int
 ProtocolProbeSessionAccept::mainEvent(int event, void *data)
 {
@@ -151,7 +151,7 @@ ProtocolProbeSessionAccept::mainEvent(int event, void *data)
   MachineFatal("Protocol probe received a fatal error: errno = %d", -((int)(intptr_t)data));
   return EVENT_CONT;
 }
-`` `
+```
 
 ## References
 
@@ -164,7 +164,7 @@ ProtocolProbeSessionAccept::mainEvent(int event, void *data)
 
 ## definition
 
-`` `
+```
 struct ProtocolProbeTrampoline : public Continuation, public ProtocolProbeSessionAcceptEnums {
   static const size_t minimum_read_size = 1;
   // In iocore/net/P_Net.h, defined:
@@ -282,11 +282,11 @@ struct ProtocolProbeTrampoline : public Continuation, public ProtocolProbeSessio
   // probeParent points to the ProtocolProbeSessionAccept state machine that created this "boringbed" instance
   const ProtocolProbeSessionAccept *probeParent;
 };
-`` `
+```
 
 ## Method
 
-`` `
+```
 static bool
 proto_is_spdy(IOBufferReader *reader)
 {
@@ -315,7 +315,7 @@ proto_is_http2(IOBufferReader *reader)
   ink_assert(nbytes <= (int64_t)HTTP2_CONNECTION_PREFACE_LEN);
   return memcmp(HTTP2_CONNECTION_PREFACE, buf, nbytes) == 0;
 }
-`` `
+```
 
 ## No lock design / Mutex Free
 
@@ -368,12 +368,12 @@ If ProtocolProbeTrampoline does not successfully bounce netvc to the upper layer
 
   - Considering that iobuf points directly to the iobuf of sslvc in sslvc, so make a judgment before releasing
 
-`` `
+```
   SSLNetVConnection *ssl_vc = dynamic_cast<SSLNetVConnection *>(netvc);
   if (!ssl_vc || (this->iobuf != ssl_vc->get_ssl_iobuf())) {
     free_MIOBuffer(this->iobuf);
   }
-`` `
+```
 
 to sum up:
 

@@ -26,7 +26,7 @@ PluginIdentity is the base class used to identify PluginVC identity
 
 Since PluginVC needs to be disguised as a NetVConnection, it inherits from two classes.
 
-`` `
+```
 class PluginVC : public NetVConnection, public PluginIdentity
 {
   friend class PluginVCCore;
@@ -171,14 +171,14 @@ private:
   const char *plugin_tag;
   int64_t plugin_id;
 };
-`` `
+```
 
 ### Initialization and construction
 
 PluginVC does not appear alone, it always exists as a member of PluginVCCore.
 Therefore, PluginVC is obtained by creating a PluginVCCore instance with alloc().
 
-`` `
+```
 PluginVCCore *
 PluginVCCore::alloc()
 {
@@ -186,7 +186,7 @@ PluginVCCore::alloc()
   pvc->init();
   return pvc; 
 }
-`` `
+```
 
 Initialize by calling init()
 
@@ -194,7 +194,7 @@ Initialize by calling init()
 - Initialize two PluginVC members, active_vc and passive_vc
 - Create MIOBuffer and IOBufferReader for bidirectional data transfer
 
-`` `
+```
 void
 PluginVCCore::init()
 {
@@ -230,7 +230,7 @@ PluginVCCore::init()
 
   Debug("pvc", "[%u] Created PluginVCCore at %p, active %p, passive %p", id, this, &active_vc, &passive_vc);
 }
-`` `
+```
 
 Since there are a large number of operations for setting callbacks in PluginVC, setup_event_cb() was created to implement this setting.
 
@@ -244,7 +244,7 @@ There is a description at the head of the function. In order to avoid the lock p
   - After getting the lock of the current PluginVC itself, you can set the callback for the event.
   - Since PluginVCCore and two PluginVC members share the same mutex, when the two PluginVCs need to notify each other, this event can arrange each other's callbacks.
 
-`` `
+```
 // void PluginVC::setup_event_cb(ink_hrtime in)
 //
 //    Setup up the event processor to call us back.
@@ -283,7 +283,7 @@ PluginVC::setup_event_cb(ink_hrtime in, Event **e_ptr)
     }
   }
 }
-`` `
+```
 
 ### PluginVC Read I/O Process Analysis
 
@@ -299,7 +299,7 @@ Then set
 
 Finally, return to VIO
 
-`` `
+```
 PluginVC::do_io_read(Continuation *c, int64_t nbytes, MIOBuffer *buf)                                                                        
 {
   ink_assert(!closed);
@@ -332,7 +332,7 @@ PluginVC::do_io_read(Continuation *c, int64_t nbytes, MIOBuffer *buf)
 
   return &read_state.vio;
 }
-`` `
+```
 
 After setting need_read_process, EventSystem will call back PluginVC::main_handler() and then call process_read_side(false).
 
@@ -340,7 +340,7 @@ After setting need_read_process, EventSystem will call back PluginVC::main_handl
 - Since process_read_side() contains processing in two cases, it is very complicated.
 - So I will mark it in the code, and the unmarked part is the common code that is needed in both cases.
 
-`` `
+```
 // void PluginVC::process_read_side()
 //
 //   This function may only be called while holding
@@ -500,7 +500,7 @@ PluginVC::process_read_side(bool other_side_call)
     }
   }
 }
-`` `
+```
 
 ### PluginVC Write I/O Process Analysis
 

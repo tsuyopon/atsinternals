@@ -14,7 +14,7 @@ At this point we need to establish a TwoWayTunnel for the two VCs on the client 
 
 First, create two OneWayTunnel
 
-`` `
+```
 OneWayTunnel *c_to_s = OneWayTunnel::OneWayTunnel_alloc();
 OneWayTunnel *s_to_c = OneWayTunnel::OneWayTunnel_alloc();
 
@@ -32,7 +32,7 @@ s_to_c->init(serverVC, clientVC, NULL, 0 , c_to_s->mutex);
 
 // Finally, associate two tunnels
 OneWayTunnel::SetupTwoWayTunnel(c_to_s, s_to_c);
-`` `
+```
 
 At this point, the TwoWayTunnel is built. If the clientVC has data, it will be read into the internal MIOBuffer and then sent out when the serverVC is writable.
 Similarly, when serverVC has data readable, it will be read into the internal MIOBuffer and then sent out when clientVC is writable.
@@ -72,7 +72,7 @@ Members are defined in OneWayTunnel:
 
 In the startEvent, the notification from the peer OneWayTunnel is determined, and after the WRITE_COMPLETE, the notification is sent to the peer OneWayTunnel:
 
-`` `
+```
   switch (event) {
   case ONE_WAY_TUNNEL_EVENT_PEER_CLOSE:
     /* This event is sent out by our peer */
@@ -93,11 +93,11 @@ In the startEvent, the notification from the peer OneWayTunnel is determined, an
     close_target_vio(result);
     connection_closed(result);
     break;
-`` `
+```
 
 
 After closing VIO, according to the value of free_vcs, determine whether to continue to close VC
-`` `
+```
 void
 OneWayTunnel::close_source_vio(int result)
 {
@@ -130,11 +130,11 @@ OneWayTunnel::close_target_vio(int result, VIO *vio)
     n_connections--;
   }
 }
-`` `
+```
 
 Complete the association of two OneWayTunnels via SetupTwoWayTunnel:
 
-`` `
+```
 void
 OneWayTunnel::SetupTwoWayTunnel(OneWayTunnel *east, OneWayTunnel *west)
 {
@@ -144,7 +144,7 @@ OneWayTunnel::SetupTwoWayTunnel(OneWayTunnel *east, OneWayTunnel *west)
   east->tunnel_peer = west;
   west->tunnel_peer = east;
 }
-`` `
+```
 ## state machine design pattern
 
 We see that TwoWayTunnel is made up of two OneWayTunnels that share a mutex and are designed with events specifically for collaboration.

@@ -62,7 +62,7 @@ Scheduling method:
 
 Comparison with Event, EThread event dispatching methods:
 
-`` `
+```
                                               event
 EventProcessor::schedule_*(cont, etype)  ---------------->  EThread[etype][RoundRobin]->QUEUE
 
@@ -71,11 +71,11 @@ EventProcessor::schedule_*(cont, etype)  ---------------->  EThread[etype][Round
 
                                               (self)
                     Event::schedule_*()  ---------------->  this->ethread->QUEUE
-`` `
+```
 
 ## definition
 
-`` `
+```
 class EventProcessor : public Processor
 {
 public:
@@ -228,11 +228,11 @@ public:
 };
 
 external inkcoreapi class EventProcessor eventProcessor;
-`` `
+```
 
 The constructor performs a basic initialization of the EventProcessor, which is set to 0.
 
-`` `
+```
 TS_INLINE
 EventProcessor::EventProcessor() : n_ethreads(0), n_thread_groups(0), n_dthreads(0), thread_data_used(0)
 {
@@ -241,13 +241,13 @@ EventProcessor::EventProcessor() : n_ethreads(0), n_thread_groups(0), n_dthreads
   memset(n_threads_for_type, 0, sizeof(n_threads_for_type));
   memset(next_thread_for_type, 0, sizeof(next_thread_for_type));
 }
-`` `
+```
 
 ## Creating a DEDICATED type of EThread
 
 EventProcessor provides methods specifically for creating EThreads of type DEDICATED:
 
-`` `
+```
 Event *
 EventProcessor::spawn_thread(Continuation *cont, const char *thr_name, size_t stacksize)
 {
@@ -267,7 +267,7 @@ EventProcessor::spawn_thread(Continuation *cont, const char *thr_name, size_t st
   // Finally return the event (Event) to the caller.
   return e;
 }
-`` `
+```
 
 This method can be called with the globally unique instance eventProcessor.spawn_thread(). It is usually useless to create an event (Event) returned by EDIC of type DEDICATED and does not need to be saved.
 
@@ -275,7 +275,7 @@ This method can be called with the globally unique instance eventProcessor.spawn
 
 EventProcessor provides a method for creating an EThread group of type REGULAR. This method creates a batch of threads at a time to implement concurrent events for a certain function:
 
-`` `
+```
 EventType
 EventProcessor::spawn_event_threads(int n_threads, const char *et_name, size_t stacksize)
 {
@@ -318,7 +318,7 @@ EventProcessor::spawn_event_threads(int n_threads, const char *et_name, size_t s
   // Returns the thread group ID
   return new_thread_group_id;
 }
-`` `
+```
 
 This method can be called by the global unique instance eventProcessor.spawn_event_threads(). Usually, the EThread of type REGULAR is created to return the ID of the thread group, which needs to be saved.
 
@@ -333,7 +333,7 @@ At system startup, there is a global eventProcessor, which is the only instance 
 - But [ET_NET 0] is changed by the main() function at the end of thread->execute()
 - The above process is implemented by eventProcessor.start(...)
 
-`` `
+```
 int
 EventProcessor::start(int n_event_threads, size_t stacksize)
 {
@@ -449,7 +449,7 @@ EventProcessor::start(int n_event_threads, size_t stacksize)
   // Actually the ID of the created thread group, because it is the first group, so it is 0, the same as spawn_event_threads()
   return 0;
 }
-`` `
+```
 
 - Then netProcessor starts, creating a NetAccept independent thread for each service port
   - Independent threads are implemented by the DEDICATED part of execute()
@@ -465,7 +465,7 @@ When an event is placed in a thread group through the eventProcessor.schedule_*(
 
 This mechanism is relatively simple to implement. Each time an event is created, assign_thread() is called to get a pointer to EThread, and then the thread (EThread) handles the event. The specific implementation is as follows:
 
-`` `
+```
 TS_INLINE EThread *
 EventProcessor::assign_thread(EventType etype)
 {
@@ -481,7 +481,7 @@ EventProcessor::assign_thread(EventType etype)
   // Get the pointer to the next EThread via the eventthread[etype][] array
   return (eventthread[etype][next]);
 }
-`` `
+```
 
 There is no lock on the operation of the next_thread_for_type[] array, which may cause competition problems, but it will not cause the program to crash. Since it is not very strict, the task allocation between threads is completely balanced, so there are not too many requirements here. .
 
@@ -493,7 +493,7 @@ However, to ensure that each EThread is synchronized, all EThread threads must b
 
 All thread_private areas of EThread are the same size, so you only need to specify an offset for each allocation. When each EThread is operated internally, accessing the thread_private area through this offset ensures one allocation. All EThreads are allocated. In order to ensure memory access efficiency, the method also performs memory alignment when allocating.
 
-`` `
+```
 TS_INLINE off_t
 EventProcessor::allocate(int size)
 {
@@ -521,7 +521,7 @@ EventProcessor::allocate(int size)
   // old saves the value of the last thread_data_used
   return (off_t)(old + start);
 }
-`` `
+```
 
 The offset address is there, how to access data in this location?
 
@@ -531,7 +531,7 @@ The offset address is there, how to access data in this location?
 
 Let's explain this process by taking the process of space allocation in the thread of the NetHandler instance as an example:
 
-`` `
+```
 UnixNetProcessor::start(int, size_t)
 {
 ...
@@ -563,7 +563,7 @@ initialize_thread_for_net(EThread *thread)
 }
 // Any time you need to access, you can:
 NetHandler * nh = get_NetHandler (ethread);
-`` `
+```
 
 The data stored in the private data area of ​​the thread usually needs to be allocated once and then will not be released, for example:
 
@@ -591,7 +591,7 @@ EventProcessor inherits from Processor. In ATS's IO Core, Processor is defined f
 
 ## definition
 
-`` `
+```
 class Processor
 {
 public:
@@ -654,7 +654,7 @@ private:
   Processor(const Processor &);
   Processor &operator=(const Processor &);
 };
-`` `
+```
 
 ## References
 [I_Processor.h](http://github.com/opensource/trafficserver/tree/master/iocore/eventsystem/I_Processor.h)

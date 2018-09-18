@@ -43,7 +43,7 @@ HttpServerSession will eventually close
 
 ## definition
 
-`` `
+```
 class HttpServerSession : public VConnection
 {
 public:
@@ -177,7 +177,7 @@ private:
   // The data in read_buffer is only released when reset_read_buffer is executed
   IOBufferReader *buf_reader;
 };
-`` `
+```
 
 ## Status (State)
 
@@ -217,7 +217,7 @@ It also compares whether the current requested target OServer matches the alread
 
 Callback NET_EVENT_OPEN event to HttpSM::state_http_server_open after the connection is successfully established
 
-`` `
+```
 // Pass in the NetVConnection that has completed the TCP connection establishment
 void
 HttpServerSession::new_connection(NetVConnection *new_vc)
@@ -268,7 +268,7 @@ HttpServerSession::new_connection(NetVConnection *new_vc)
   // Set the status
   state = HSS_INIT;
 }
-`` `
+```
 
 After calling new_connection in HttpSM::state_http_server_open,
 
@@ -298,7 +298,7 @@ The following judgment is made in HttpSM::tunnel_handler_server:
   - If connection multiplexing is allowed,
     - Set the keep alive timeout and then call HttpServerSession::release to detach from HttpSM
 
-`` `
+```
 // Close and release HttpServerSession
 void
 HttpServerSession::do_io_close(int alerrno)
@@ -346,7 +346,7 @@ HttpServerSession::do_io_close(int alerrno)
   // Release resources, recycle object memory
   destroy();
 }
-`` `
+```
 
 As you can see, as long as HttpServerSession::do_io_close is called, the NetVConnection will be closed and the object will be released. If you need to leave the HttpServerSession for reuse, you need to pass:
 
@@ -355,7 +355,7 @@ As you can see, as long as HttpServerSession::do_io_close is called, the NetVCon
   - HttpClientSession::attach_server_session
     - Associated to HttpClientSession
 
-`` `
+```
 void
 HttpServerSession::release()
 {
@@ -392,11 +392,11 @@ HttpServerSession::release()
     ink_assert(r == HSM_DONE);
   }
 }
-`` `
+```
 
 The destroy method for releasing and reclaiming resources
 
-`` `
+```
 void
 HttpServerSession::destroy()
 {
@@ -419,7 +419,7 @@ HttpServerSession::destroy()
   else
     httpServerSessionAllocator.free(this);
 }
-`` `
+```
 
 ## References
 

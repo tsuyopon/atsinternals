@@ -37,7 +37,7 @@ The following is a partial adjustment of the order of the lines of code for the 
 
 First look at [NetState] (https://github.com/apache/trafficserver/tree/master/iocore/net/P_UnixNetState.h),
 
-`` `
+```
 struct NetState {
   volatile int enabled;
   VIO saw;
@@ -49,11 +49,11 @@ struct NetState {
   NetState() : enabled(0), vio(VIO::NONE), in_enabled_list(0), triggered(0) {}
 };
 
-`` `
+```
 
 Then UnixNetVConnection,
 
-`` `
+```
 // Calculate the memory offset of the VIO member in the NetState instance
 #define STATE_VIO_OFFSET ((uintptr_t) & ((NetState *)0)->vio)
 // return a pointer to a NetState instance containing the specified VIO
@@ -65,11 +65,11 @@ Then UnixNetVConnection,
 // Open the specified VC read and write operations, the actual modification of the specified VC NetState instance read or write enabled member is 1
 #define enable_read(_vc) (_vc)->read.enabled = 1
 #define enable_write(_vc) (_vc)->write.enabled = 1
-`` `
+```
 
 The above macro definitions are used to manipulate the NetState structure, which will be used below.
 
-`` `
+```
 class UnixNetVConnection : public NetVConnection
 {
 public:
@@ -396,7 +396,7 @@ extern ClassAllocator<UnixNetVConnection> netVCAllocator;
 
 typedef int (UnixNetVConnection::*NetVConnHandler)(int, void *);
 
-`` `
+```
 
 ## NetHandler extension: from Socket to MIOBuffer
 
@@ -422,7 +422,7 @@ Looking back at the analysis of NetHandler::mainNetEvent, we know that:
 
 The net_read_io function is analyzed in detail below:
 
-`` `
+```
 // net_read_io is a wrapper function that actually calls read_from_net()
 // In the implementation of ssl, this method will be overridden, calling ssl_read_from_net()
 void
@@ -661,7 +661,7 @@ read_from_net(NetHandler *nh, UnixNetVConnection *vc, EThread *thread)
   //     buf.writer()->write_avail() > 0
   read_reschedule(nh, vc);
 }
-`` `
+```
 
 ## NetHandler extension: from MIOBuffer to Socket
 
@@ -678,7 +678,7 @@ Looking back at the analysis of NetHandler::mainNetEvent, we know that:
 
 The write_to_net function is analyzed in detail below:
 
-`` `
+```
 // write_to_net is a wrapper function that actually calls write_to_net_io()
 // Note that both write_to_net() and write_to_net_io() are not internal methods of UnixNetVConnection.
 // For SSLVC, these two methods are also called
@@ -1050,7 +1050,7 @@ UnixNetVConnection::load_buffer_and_write(int64_t towrite, int64_t &wattempted, 
   // The caller needs to correct the total_written value based on the r value
   return (r);
 }
-`` `
+```
 
 ## NetHandler extension: callback processing for the upper state machine
 
@@ -1062,7 +1062,7 @@ If read and write VIO is set, then in the read and write operations, a callback 
 
 Both signal_error and signal_done call signal_and_update as the underlying implementation, so the following is done with read_signal_and_update (the flow of write_signal_and_update is exactly the same).
 
-`` `
+```
 static inline int
 read_signal_and_update(int event, UnixNetVConnection *vc)
 {
@@ -1100,7 +1100,7 @@ read_signal_and_update(int event, UnixNetVConnection *vc)
   }
 }
 
-`` `
+```
 
 ## NetHandler extension: Reentrant for VC callbacks
 
@@ -1154,7 +1154,7 @@ For Active Timeout and Inactivity Timeout, ATS provides the following methods:
   - set_(inactivity|active)_timeout
   - cancel_(inactivity|active)_timeout
 
-`` `
+```
 // The get method is relatively simple, directly return the value of the member
 // The suffix _in and the suffix of schedule_in are a meaning, relative to the current time, relative timeout
 TS_INLINE ink_hrtime
@@ -1287,13 +1287,13 @@ UnixNetVConnection::cancel_active_timeout()
   next_activity_timeout_at = 0;
 #endif
 }
-`` `
+```
 
 Whether Inactivity Timeout or Active Timeout requires activation of read and write operations, what is the difference between these two Timeouts?
 
 In the iocore/net/NetVCTest.cc file:
 
-`` `
+```
 void
 NetVCTest::start_test()
 {
@@ -1318,13 +1318,13 @@ NetVCTest::start_test()
     write_done = true;
   }
 }
-`` `
+```
 
 The active_timeout is set to be 5 seconds longer, so you can guess that active_timeout is longer than inactivity_timeout.
 
 The comment in iocore/net/I_NetVConnection.h illustrates the difference (with a simple translation):
 
-`` `
+```
   / **
     After the state machine uses this NetVC for a certain period of time, it receives a VC_EVENT_ACTIVE_TIMEOUT event.
     If both read and write are not activated on this NetVC, this value will be ignored.
@@ -1360,7 +1360,7 @@ The comment in iocore/net/I_NetVConnection.h illustrates the difference (with a 
     is currently active. See section on timeout semantics above.
    * /
   virtual void set_inactivity_timeout(ink_hrtime timeout_in) = 0;
-`` `
+```
 
 and so,
 
@@ -1389,7 +1389,7 @@ When the ATS sets up a separate accept thread, after a new socket connection is 
 
 Let's take a look at the process analysis of acceptEvent:
 
-`` `
+```
 int
 UnixNetVConnection::acceptEvent(int event, Event *e)
 {
@@ -1468,7 +1468,7 @@ UnixNetVConnection::acceptEvent(int event, Event *e)
   action_.continuation->handleEvent(NET_EVENT_ACCEPT, this);
   return EVENT_DONE;
 }
-`` `
+```
 
 ### Initiate a new link (startEvent)
 
@@ -1476,7 +1476,7 @@ When you need to initiate a connection to the outside, first create a vc, and th
 
 When startEvent is returned, connectUp will be called, and subsequent operations will be completed by connectUp. The connectUp method will be introduced in the following sections.
 
-`` `
+```
 int
 UnixNetVConnection::startEvent(int /* event ATS_UNUSED */, Event *e)
 {
@@ -1494,7 +1494,7 @@ UnixNetVConnection::startEvent(int /* event ATS_UNUSED */, Event *e)
     free(e->ethread);
   return EVENT_DONE;
 }
-`` `
+```
 
 ### Main handler (mainEvent)
 
@@ -1512,13 +1512,13 @@ In ATS, the processing of TIMEOUT is divided into two modes:
 
 Prior to 6.0.0, defined in [P_UnixNet.h] (http://github.com/apache/trafficserver/tree/master/iocore/net/P_UnixNet.h)
 
-`` `
+```
 #define INACTIVITY_TIMEOUT
-`` `
+```
 
 This is a timeout control implemented using a mechanism based on the EventSystem timed event. Two members are also defined in the UnixNetVConnection to work with:
 
-`` `
+```
 #ifdef INACTIVITY_TIMEOUT
   Event *inactivity_timeout;
   Event *activity_timeout;
@@ -1526,14 +1526,14 @@ This is a timeout control implemented using a mechanism based on the EventSystem
   ink_hrtime next_inactivity_timeout_at;
   ink_hrtime next_activity_timeout_at;
 #endif
-`` `
+```
 
 However, starting at 6.0.0, this line is commented out, and a separate state machine InactivityCop is used to implement timeout control.
 
 In this chapter, we introduce the early timeout processing mechanism. In the following chapters, we introduce the InactivityCop state machine.
 
 
-`` `
+```
 //
 // The main event for UnixNetVConnections.
 // This is called by the Event subsystem to initialize the UnixNetVConnection
@@ -1678,7 +1678,7 @@ UnixNetVConnection::mainEvent(int event, Event *e)
   // Finally always returns EVENT_DONE
   return EVENT_DONE;
 }
-`` `
+```
 
 ## Method
 
@@ -1686,7 +1686,7 @@ UnixNetVConnection::mainEvent(int event, Event *e)
 
 How do I create a connection to the source server?
 
-`` `
+```
 int
 UnixNetVConnection::connectUp(EThread *t, int fd)
 {
@@ -1795,13 +1795,13 @@ fail:
   free(t);
   return CONNECT_FAILURE;
 }
-`` `
+```
 
 ### 激活 VIO & VC（reenable & reenable_re）
 
 Two methods, reenable and reenable_re, are provided in UnixNetVConnection, corresponding to the VIO defined in [P_VIO.h] (http://github.com/apache/trafficserver/tree/master/iocore/eventsystem/P_VIO.h) Two methods of reenable and reenable_re.
 
-`` `
+```
 TS_INLINE void
 VIO :: reenable ()
 {
@@ -1814,13 +1814,13 @@ VIO::reenable_re()
   if (vc_server)
     vc_server->reenable_re(this);
 }
-`` `
+```
 
 We know that one end of VIO is VC, the other end is MIOBuffer, and VC is always active, driven by IOCore, so the reenable to VIO is VC's reenable.
 
 So what is the difference between reenable and reenable_re? In what scenario is it used separately? With questions, let's comment and analyze the two methods first.
 
-`` `
+```
 //
 // Function used to reenable the VC for reading or
 // writing.
@@ -1948,7 +1948,7 @@ UnixNetVConnection::reenable_re(VIO *vio)
     reenable (saw);
   }
 }
-`` `
+```
 
 Compare reenable with reenable_re:
 
@@ -1983,7 +1983,7 @@ All NetVC and its inheritance classes will call the close_UnixNetVConnection fun
 
 Therefore, this function is called for the shutdown of SSLNetVConnection, but since the free method is a member function, ```vc->free(t)``` executes the release operation corresponding to the NetVConnection inheritance type.
 
-`` `
+```
 //
 // Function used to close a UnixNetVConnection and free the vc
 //
@@ -2038,13 +2038,13 @@ close_UnixNetVConnection(UnixNetVConnection *vc, EThread *t)
   // Finally call vc free method
   vc->free(t);
 }
-`` `
+```
 
 After vc is closed, resources need to be reclaimed. Since vc's memory resources are allocated through the allocate_vc function, the memory is also returned to the memory pool during reclaim.
 
 Each type of NetVC inheritance class will have a matching NetProcessor inheritance class to provide the allocate_vc function and its own free function.
 
-`` `
+```
 void
 UnixNetVConnection::free(EThread *t)
 {
@@ -2102,13 +2102,13 @@ UnixNetVConnection::free(EThread *t)
     THREAD_FREE(this, netVCAllocator, t);
   }
 }
-`` `
+```
 
 Since close_UnixNetVConnection and free are not reentrant, in many places, we have seen the use of vc's reentrant counter to determine the reentrant.
 
 For example, in do_io_close:
 
-`` `
+```
 void
 UnixNetVConnection::do_io_close(int alerrno /* = -1 */)
 {
@@ -2140,7 +2140,7 @@ UnixNetVConnection::do_io_close(int alerrno /* = -1 */)
   // There is no operation here for the case where vc cannot be closed immediately, and there is no rescheduling to delay closing vc.
   // Then when is the close_UnixNetVConnection called to close vc? The answer is: will be processed in InactivityCop
 }
-`` `
+```
 
 ### Memo on the atomicity of the in_enable_list operation
 

@@ -58,27 +58,27 @@ in conclusion
 
 Its definition is very simple
 
-`` `
+```
 struct ProxyAllocator {
   int allocated;
   void *freelist;
 
   ProxyAllocator() : allocated(0), freelist(0) {}
 };
-`` `
+```
 
 So how do you implement a linked list operation through a freelist? Please refer to the following code:
 
-`` `
+```
   if (l.freelist) {                                                                                                
     void *v = (void *)l.freelist;
     l.freelist = *(void **)l.freelist;
     --(l.allocated);
     return v;
   }
-`` `
+```
 
-`` `
+```
 #define THREAD_FREE(_p, _a, _t)                            \
   do {                                                     \
     *(char **)_p = (char *)_t->_a.freelist;                \                                                       
@@ -87,7 +87,7 @@ So how do you implement a linked list operation through a freelist? Please refer
     if (_t->_a.allocated > thread_freelist_high_watermark) \
       thread_freeup(::_a, _t->_a);                         \
   } while (0)
-`` `
+```
 
 As we said before, only the free memory block is saved in the freelist list.
 
@@ -97,21 +97,21 @@ In order to save memory usage, freelist stores the pointer address of the next m
 
 So we saw a very strange code:
 
-`` `
+```
 l.freelist = *(void **)l.freelist;
 
 Equivalent to
 
 l.freelist = (void *)l.freelist[0];
-`` `
+```
 
-`` `
+```
 *(char **)_p = (char *)_t->_a.freelist;
 
 Equivalent to
 
 (char *)_p[0] = (char *)_t->_a.freelist;
-`` `
+```
 
 ## References
 - [I_ProxyAllocator.h](http://github.com/apache/trafficserver/tree/master/iocore/eventsystem/I_ProxyAllocator.h)

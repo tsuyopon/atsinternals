@@ -9,9 +9,9 @@ Because ServerSessionPool is designed in two layers in ATS:
   - One layer is in the thread, there is a local ServerSessionPool in each thread
   - Also included in the httpSessionManager is a global ServerSessionPool
 
-`` `
+```
 HttpSessionManager httpSessionManager;
-`` `
+```
 
 However, it should be noted that in fact, ServerSessionPool has a three-layer design:
 
@@ -23,7 +23,7 @@ The implementation of the above three-layer design will be seen below in the acq
 
 ## definition
 
-`` `
+```
 class HttpSessionManager
 {
 public:
@@ -52,23 +52,23 @@ private:
   // Therefore, we do not initialize the global session pool in the constructor, but instead call the init method to initialize the global session pool after the global statistics system has been initialized.
   ServerSessionPool *m_g_pool;
 };
-`` `
+```
 
 ## Method
 
 ### HttpSessionManager::init
 
-`` `
+```
 void
 HttpSessionManager::init()
 {
   m_g_pool = new ServerSessionPool;
 }
-`` `
+```
 
 ### HttpSessionManager::purge_keepalives
 
-`` `
+```
 // TODO: Should this really purge all keep-alive sessions?
 // Does this make any sense, since we always do the global pool and not the per thread?
 // From the comments point of view, there are still some doubts here, because this method only closes and releases the session in the global session pool.
@@ -84,11 +84,11 @@ HttpSessionManager::purge_keepalives()
     m_g_pool->purge();
   } // should we do something clever if we don't get the lock?
 }
-`` `
+```
 
 ### HttpSessionManager::acquire_session
 
-`` `
+```
 HSMresult_t
 HttpSessionManager::acquire_session(Continuation * /* cont ATS_UNUSED */, sockaddr const *ip, const char *hostname,
                                     HttpClientSession *ua_session, HttpSM *sm)
@@ -189,7 +189,7 @@ HttpSessionManager::acquire_session(Continuation * /* cont ATS_UNUSED */, sockad
   }
   return retval;
 }
-`` `
+```
 
 ServerSessionPool::acquireSession 方法：
 
@@ -208,7 +208,7 @@ HttpSM::attach_server_session does just that. If you don't want to do any readin
 
 ### HttpSessionManager::release_session
 
-`` `
+```
 HSMresult_t
 HttpSessionManager::release_session(HttpServerSession *to_release)
 {
@@ -235,7 +235,7 @@ HttpSessionManager::release_session(HttpServerSession *to_release)
   // return different results depending on whether the ServerSession was successfully placed in the session pool
   return released_p ? HSM_DONE : HSM_RETRY;
 }
-`` `
+```
 
 ## ALL
 
@@ -252,7 +252,7 @@ By analyzing the code of the HttpSessionManager, I feel that this is a semi-fini
 
 First look at a piece of code from the HttpSM::attach_server_session method
 
-`` `
+```
 void
 HttpSM::attach_server_session(HttpServerSession *s)
 {
@@ -267,7 +267,7 @@ HttpSM::attach_server_session(HttpServerSession *s)
   server_session->mutex = this->mutex;
 ...
 }
-`` `
+```
 
 When this code is executed:
 

@@ -10,7 +10,7 @@ Please refer to OneWayTunnel for other details.
 
 ## definition
 
-`` `
+```
 /** Maximum number which can be tunnelled too */
 // Since each target VC needs to allocate an IOBufferReader from MIOBuffer, the source VC also uses an IOBufferReader.
 // So, the maximum number of target VCs defined here is one less than the maximum value of IOBufferReader (used by the source VC)
@@ -126,19 +126,19 @@ struct OneWayMultiTunnel : public OneWayTunnel {
   // The default is false. Source VIO may have completed before entering the init function (ntodo == 0)
   bool source_read_previously_completed;
 };
-`` `
+```
 
 ## Method
 
 ### The first init() method
 
-`` `
+```
 void init(VConnection *vcSource, VConnection **vcTargets, int n_vcTargets, 
          Continuation *aCont = NULL, int size_estimate = 0, // 0 == best guess
          int64_t nbytes = TUNNEL_TILL_DONE, bool asingle_buffer = true, 
          bool aclose_source = true, bool aclose_target = true,
          Transform_fn manipulate_fn = NULL, int water_mark = 0);
-`` `
+```
 The init function will set read on the source VC (call do_io_read) and set write on all target VCs (call do_io_write).
 
 Relative to the first OneWayTunnel::init()
@@ -154,10 +154,10 @@ Note that when asingle_buffer is set to false:
 
 ### The second init() method
 
-`` `
+```
 void init(Continuation *aCont, VIO *SourceVio, VIO **TargetVios, int n_vioTargets, 
          bool aclose_source = true, bool aclose_target = true);
-`` `
+```
 Init function, indicating that the source VC read and the destination VC write have been set, if there is no aCont incoming, then a new mutex will be used, the tunnel for the source VC read and the destination VC write, the caller needs to guarantee, the source VC and all destination VCs use the same buf (if not the same buf, the current code will throw an exception), and release buf after completion.
 
 Relative to the third OneWayTunnel::init()
@@ -165,9 +165,9 @@ Relative to the third OneWayTunnel::init()
 - Added n_vcTargets to specify the number of vcTargets.
 
 In this case, it is possible that the previous read operation on the source VC has been completed, so during the initialization process:
-`` `
+```
 source_read_previously_completed = (SourceVio->ntodo() == 0);
-`` `
+```
 
 SourceVC is usually turned off after receiving the READ_COMPLETE event on SourceVC
 
@@ -185,7 +185,7 @@ However, when source_read_previously_completed is true, startEvent does not rece
 
 After the init call, the tunnel's callback function is set to OneWayMultiTunnel::startEvent, and its internal logic is as follows:
 
-`` `
+```
 当 VC_EVENT_READ_READY
     // Since do_io_read is only executed on the source VC, this event is only fired when the source VC has data readable.
     // Call transform to transfer data from source VIO to temporary VIO: topOutBuffer
@@ -264,7 +264,7 @@ Ldone:
     / / Responsible for releasing the Tunnel, if aCont is passed in init, it is responsible for callback aCont, aCont will be responsible for releasing the Tunnel
     connection_closed(result);
 
-`` `
+```
 
 Since the transform() function inherited from OneWayTunnel is still called when the data is passed in the MIOBuffer of the source VC and the MIOBuffer of the target VC, the OneWayMultiTunnel also supports only single_buffer == true.
 

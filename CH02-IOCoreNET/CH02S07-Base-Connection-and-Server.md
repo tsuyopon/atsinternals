@@ -4,7 +4,7 @@ Used to define a network connection and client side.
 
 # definition
 
-`` `
+```
 struct Connection {
   SOCKET fd; ///< The fd descriptor of the connection is actually an int type
   IpEndpoint addr; ///< associated address information
@@ -76,13 +76,13 @@ protected:
   // call close() to close the socket
   void _cleanup();
 };
-`` `
+```
 
 ## About the cleaner template in UnixConnection.cc
 
 A cleaner template class is defined in [UnixConnection.cc] (https://github.com/apache/trafficserver/tree/master/iocore/net/UnixConnection.cc):
 
-`` `
+```
 // This cleaner template can only be used in UnixConnection.cc because of the definition of an unnamed namespace
 namespace
 {
@@ -125,7 +125,7 @@ template <typename T> struct cleaner {
   }
 };
 }
-`` `
+```
 
 
 #基组件:Server
@@ -134,7 +134,7 @@ Inherited from the Connection base class, used to define a server side.
 
 # definition
 
-`` `
+```
 struct Server : public Connection {
   // Prepare to accept the local IP address of the client connection
   IpEndpoint accept_addr;
@@ -186,7 +186,7 @@ struct Server : public Connection {
   / / Initialize the member f_inbound_transparent = false, accept_addr memory area is filled with 0
   Server() : Connection(), f_inbound_transparent(false) { ink_zero(accept_addr); }
 };
-`` `
+```
 
 # References
 

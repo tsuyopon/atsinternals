@@ -6,7 +6,7 @@ OneWayTunnel implements a simple data transfer function that reads data from one
 
 ## definition
 
-`` `
+```
 //////////////////////////////////////////////////////////////////////////////////////////////////// //////////////////////////////////////////////////
 //
 //      OneWayTunnel
@@ -35,7 +35,7 @@ typedef void (*Transform_fn)(MIOBufferAccessor &in_buf, MIOBufferAccessor &out_b
   a IOBuffer containing the data to be written into the target virtual
   connection which it may manipulate in any manner it sees fit.
 * /
-`` `
+```
 
 The above comments are translated as follows:
 OneWayTunnel is a general state machine that connects two VConnections. It can be used as a module to connect the source VC and the destination VC, and write the data read by the source VC to the destination VC.
@@ -51,7 +51,7 @@ You can turn a Tunnel into a filter by setting the pointer to the manual_fn func
 - manipulate_fn can handle the data contained in it in any way.
 - However, the default value of manual_fn is usually NULL.
 
-`` `
+```
 struct OneWayTunnel : public Continuation {
   //
   //  Public Interface
@@ -230,20 +230,20 @@ private:
   OneWayTunnel(const OneWayTunnel &);
   OneWayTunnel &operator=(const OneWayTunnel &);
 };
-`` `
+```
 
 ## Method
 
 ### The first init() method
 
-`` `
+```
 void init (VConnection * vcSource, VConnection * vcTarget, 
          Continuation *aCont = NULL, int size_estimate = 0, // 0 = best guess
          ProxyMutex *aMutex = NULL, 
          int64_t nbytes = TUNNEL_TILL_DONE, bool asingle_buffer = true, 
          bool aclose_source = true, bool aclose_target = true, 
          Transform_fn manipulate_fn = NULL, int water_mark = 0);
-`` `
+```
 
 The init function will set read on the source VC (call do_io_read), set write on the target VC (call do_io_write), automatically create a MIOBuffer for internal use, and release buf upon completion. The parameters are as follows:
 
@@ -284,12 +284,12 @@ The init function will set read on the source VC (call do_io_read), set write on
 
 ### The second init() method
 
-`` `
+```
 void init (VConnection * vcSource, VConnection * vcTarget, 
           Continuation *aCont, 
           VIO *SourceVio, IOBufferReader *reader,
           bool aclose_source = true, bool aclose_target = true);
-`` `
+```
 
 Init function, only set write on the target VC (call do_io_write), you need to ensure that the source VC has completed the read settings (call do_io_read), if there is no aCont incoming, then a new mutex will be used, the tunnel for the source VC read and purpose VC writes the same buf, which is the incoming reader, and releases the buf when it is finished. The parameters are as follows:
 
@@ -303,10 +303,10 @@ Note: Although read(do_io_read) is not set for the source VC, SourceVio->set_con
 
 ### The third init() method
 
-`` `
+```
 void init(Continuation *aCont, VIO *SourceVio, VIO *TargetVio, 
           bool aclose_source = true, bool aclose_target = true);
-`` `
+```
 - SourceVio
    - Source VC's VIO
    - Switch state machine by calling SourceVio->set_continuation(this)
@@ -325,7 +325,7 @@ Note: There is an assert in this transfer_data function, marked as "Function not
 The transfer_data function is called when it is determined in OneWayTunnel::transform that the source buf is different from the address of the target buf.
 Therefore, you can assume that OneWayTunnel does not support single_buffer = false.
 
-`` `
+```
 inline void
 transfer_data(MIOBufferAccessor &in_buf, MIOBufferAccessor &out_buf)
 {
@@ -355,13 +355,13 @@ OneWayTunnel::transform(MIOBufferAccessor &in_buf, MIOBufferAccessor &out_buf)
   else if (in_buf.writer() != out_buf.writer())
     transfer_data(in_buf, out_buf);
 }
-`` `
+```
 
 ### connection_closed function
 
 BUG: When calling the callback function, the second parameter cont passed should be this, so that the instance of the Tunnel can be passed into the callback function, and then the callback function calls OneWayTunnel_free to release the Tunnel.
 
-`` `
+```
 void
 OneWayTunnel::connection_closed(int result)
 {
@@ -375,13 +375,13 @@ OneWayTunnel::connection_closed(int result)
   }
 }
 
-`` `
+```
 
 ### startEvent Process Analysis
 
 After the init call, the Tunnel's callback function is set to OneWayTunnel::startEvent, and its internal logic is as follows:
 
-`` `
+```
 当 VC_EVENT_READ_READY
     // Since do_io_read is only executed on the source VC, this event is only fired when the source VC has data readable.
     transform(vioSource->buffer, vioTarget->buffer);
@@ -438,7 +438,7 @@ Ldone:
     / / Responsible for releasing the Tunnel, if aCont is passed in init, it is responsible for callback aCont, aCont will be responsible for releasing the Tunnel
     connection_closed(result);
 
-`` `
+```
 
 ## References
 

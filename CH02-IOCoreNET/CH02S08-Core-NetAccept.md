@@ -14,7 +14,7 @@ In the state machine design of ATS, the server implementation of each state mach
 
 # definition
 
-`` `
+```
 //
 // Default accept function
 //   Accepts as many connections as possible, returning the number accepted
@@ -295,7 +295,7 @@ Ldone:
   return count;
 }
 
-`` `
+```
 
 NetAccept can be a separate thread (DEDICATED ETHREAD mode)
 
@@ -319,7 +319,7 @@ Let's first look at how to create a DEDICATED ETHREAD to execute an instance of 
 
 The following process analysis simplifies part of the code for netProcessor.accept() to make the expression clearer:
 
-`` `
+```
    NetAccept *na = createNetAccept();
    // Potentially upgrade to SSL. 
    // Since NetProcessor is the base class of SSLNetProcessor, it is necessary to determine whether it needs to be upgraded from SSLVC to SSLVC.
@@ -374,24 +374,24 @@ The following process analysis simplifies part of the code for netProcessor.acce
       return
    // accept ends
    return
-`` `
+```
 
 At this point, the creation of a separate accept thread is completed.
 
 ## NetAccept::acceptLoopEvent starts running, its internal logic and process are as follows:
 
-`` `
+```
 int NetAccept::acceptLoopEvent(int event, Event *e)
    // In fact, the event *e passed in here is the event of alloc in the eventProcessor.spawn_thread function.
    // and t is also the new EThread in the eventProcessor.spawn_thread function.
    EThread *t = this_ethread();
    // Infinite loop calls do_blocking_accept
    while (do_blocking_accept(t) >= 0) ;
-`` `
+```
 
 ## NetAccept::do_blocking_accept(t) starts running and is nested inside the while loop
 
-`` `
+```
 int NetAccept::do_blocking_accept(EThread *t)
    // Note that here we are running in the NetAccept class, so action_ represents AcceptorCont
    // Declare a Connection class to receive the new connection handle returned by the accept method
@@ -438,7 +438,7 @@ int NetAccept::do_blocking_accept(EThread *t)
       // And generate a signal that interrupts the sleep inside eventProcessor and the blocking of epoll_wait to facilitate timely processing of newly joined connections.
       eventProcessor.schedule_imm_signal(vc, getEtype());
    } while (loop)
-`` `
+```
 
 After accepting the new connection, a new VC is created, which is bound to the UnixNetVConnection state machine (SM), which is then used by the Net handler to take over the processing of each state.
 
@@ -448,7 +448,7 @@ So how do you choose one of several threads to handle? (Review the chapter on ev
 
 The following analyzes the code for eventProcessor.schedule_imm_signal:
 
-`` `
+```
 TS_INLINE Event *
 EventProcessor::schedule_imm_signal(Continuation *cont, EventType et, int callback_event, void *cookie)
 {
@@ -494,7 +494,7 @@ EventProcessor::assign_thread(EventType etype)
     next = 0;
   return (eventthread[etype][next]);
 }
-`` `
+```
 
 Through the above analysis, we confirm that when the new connection is encapsulated by Event, when it is placed in the external queue of the EThread thread, it is selected by the load algorithm that polls multiple EThreads.
 
@@ -560,9 +560,9 @@ Calling acceptFastEvent is equivalent to including the processing part of accept
 
 Although there is an assert() before the operation of these two queues to ensure that ATS stops running when such an exception occurs, why not support asynchronous calls?
 
-`` `
+```
 ink_assert(vc->nh->mutex->thread_holding == this_ethread());
-`` `
+```
 
   - Negative Queue
     - acceptEvent(etype, na)

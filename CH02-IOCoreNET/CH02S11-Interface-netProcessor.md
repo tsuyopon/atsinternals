@@ -39,7 +39,7 @@ The base class NetProcessor simply defines the API, and the implementation is do
 
 ### Definition
 
-`` `
+```
 / **
   This is the heart of the Net system. Provides common network APIs,
   like accept, connect etc. It performs network I/O on behalf of a
@@ -257,7 +257,7 @@ private:
   @endcode
 * /
 External InkCoreapi NetProcessor & NetProcessor;
-`` `
+```
 
 ### References
 
@@ -269,7 +269,7 @@ UnixNetProcessor is a concrete implementation of NetProcessor on a Unix-like sys
 
 ### Definition
 
-`` `
+```
 struct UnixNetProcessor : public NetProcessor {
 public:
   // internal methods are used to implement the accept method
@@ -319,7 +319,7 @@ public:
   // pointer array to the ET_NET thread group object in eventProcessor
   EThread **netthreads;
 };
-`` `
+```
 
 ### References
 
