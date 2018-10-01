@@ -425,23 +425,23 @@ SocksEntry::mainEvent
   - Receive the authentication method returned by the Socks server
   - If the user name and password are used for authentication, the user name and password are sent to complete the authentication, which is based on RFC1929.
   - Enter the Socks command sending stage after successful authentication
-  `` `
-  + ----- + ----- + ------- + ------ + ---------- + ------------ +
+  ```
+  +-----+-----+-------+------+----------+----------+
   | VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
-  + ----- + ----- + ------- + ------ + ---------- + ------------ +
+  +-----+-----+-------+------+----------+----------+
   |  1  |  1  | X'00' |  1   | Variable |    2     |
-  + ----- + ----- + ------- + ------ + ---------- + ------------ +
-  `` `
+  +-----+-----+-------+------+----------+----------+
+  ```
 
 - If using the Socks v4 protocol
   - No authentication process, directly into the Socks command sending phase
-  `` `
-  + ---- + ---- + ---- + ---- + ---- + ---- + ---- + ---- + ---- + ---- + .... + ---- +
+  ```
+  +----+----+----+----+----+----+----+----+----+----+....+----+
   | VN | CD | DSTPORT |      DSTIP        | USERID       |NULL|
-  + ---- + ---- + ---- + ---- + ---- + ---- + ---- + ---- + ---- + ---- + .... + ---- +
+  +----+----+----+----+----+----+----+----+----+----+....+----+
   |  1 |  1 |    2    |         4         | variable|    |  1 |
-  + ---- + ---- + ---- + ---- + ---- + ---- + ---- + ---- + ---- + ---- + .... + ---- +
-  `` `
+  +----+----+----+----+----+----+----+----+----+----+....+----+
+  ```
 
 - The various fields of the Socks command are explained as follows:
   - VER / VN: Socks protocol version number, 0x04 or 0x05

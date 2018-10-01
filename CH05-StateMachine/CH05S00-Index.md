@@ -36,15 +36,15 @@ For the simple implementation of data transfer, the three state machines describ
 At this time, it is not simple to implement data transfer only, so the architecture of a state machine that can meet the business needs should be like this:
 
 ```
-                +----------+------------------------------+------- ---+
-                | | | |
---------------> | +===>>=== OneWayTunnel ===>>===+ | -------------- >
-                | | | |
-                ClientVC | StateMachine | ServerVC |
-                | | | |
-<-------------- | +===<<=== OneWayTunnel ===<<===+ | <------------- -
-                | | | |
-                +----------+------------------------------+------- ---+
+                +----------+------------------------------+----------+
+                |          |                              |          |
+--------------> |          +===>>=== OneWayTunnel ===>>===+          | -------------->
+                |          |                              |          |
+                | ClientVC |         StateMachine         | ServerVC |
+                |          |                              |          |
+<-------------- |          +===<<=== OneWayTunnel ===<<===+          | <--------------
+                |          |                              |          |
+                +----------+------------------------------+----------+
 ```
 
 The state machine that implements the business function controls the OneWayTunnel:
